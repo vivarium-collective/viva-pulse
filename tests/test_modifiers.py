@@ -153,6 +153,14 @@ def test_bad_multipliers_raise_before_loading(multiplier):
         _cardiovascular(circuit_modifiers={PATH: multiplier})
 
 
+def test_additions_apply_to_the_modified_patient(cache, modified):
+    """Falsifies: with circuit_additions, the state edited and loaded is the shipped StandardMale
+    rather than the modified patient's. An added path carries no flow until the first solve, so
+    at load the vitals are the modified patient's exactly."""
+    shunt = {"Shunt": {"source": "Aorta1", "target": "VenaCava1", "resistance_mmHg_s_per_mL": 0.5}}
+    state = _cardiovascular(circuit_modifiers={PATH: 5.0}, circuit_additions=shunt).initial_state()
+    assert _hemodynamics(state) == _hemodynamics(modified.state)
+
 def test_a_hit_does_not_need_the_unmodified_state(cache, modified, shipped):
     """Falsifies: a cached modified patient still reads (or, once evicted, re-stabilizes) the
     unmodified patient to compute its key. Runs last: it removes the unmodified state."""

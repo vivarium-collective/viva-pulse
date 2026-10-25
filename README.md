@@ -134,6 +134,22 @@ doc = pulse_cardiovascular(core, circuit_modifiers={"Aorta1ToBone1": 5.0})
 - Names are paths or nodes of the respiratory circuit or the active cardiovascular circuit (`FullCardiovascular`). Pulse rejects anything else, and the load fails naming the modifiers. Multipliers must be finite and greater than 0.
 - The modified patient is stabilized once and cached like any patient (see [Any patient](#any-patient)), with the modifiers in the cache key. The first run takes about 25 s: the unmodified patient is stabilized first, for Pulse's own modifiers. It starts from `patient_file` (default StandardMale), so a non-default `state_file` together with modifiers raises an error. It is whole_body only.
 
+### Circuit additions
+
+`circuit_additions` adds resistance paths to the cardiovascular circuit of the loaded state, for example an arteriovenous shunt. It is accepted by the same processes and composites as `circuit_modifiers`:
+
+```python
+doc = pulse_cardiovascular(core, circuit_additions={
+    "Shunt": {"source": "Aorta1", "target": "VenaCava1", "resistance_mmHg_s_per_mL": 0.5}})
+```
+
+- An addition is a perturbation of the loaded patient, not a new patient: nothing is re-stabilized, and the body responds over time. This shunt carries about 150 mL/s, and at 60 s MAP is 73 mmHg (from 95), HR 135 bpm (from 72) and CO 10.5 L/min (from 5.8).
+- Pulse solves a path in its circuits but moves substances only over its compartment graph. Each addition therefore gets a compartment link too, so blood carries its substances along the path. A path without the link would concentrate sodium in the aorta, dilute it in the vena cava and push arterial PO2 to 334 mmHg.
+- Accepted: a resistance path (finite, > 0) between two `FullCardiovascular` nodes in different vascular compartments, meaning in both Pulse's `Cardiovascular` and `ActiveCardiovascular` graphs, except `AbdominalCavity`. Anything else raises when the process is built: unknown nodes, `Ground`, tissue fluid, lymph, the pericardium, renal, urinary and gut-lumen compartments, nodes in no compartment, both nodes in one compartment, compliance paths, respiratory paths. Path removal is never supported (Pulse crashes).
+- In the state, the addition `Shunt` becomes path and link `VivaAddedShunt`. Pulse creates paths at run time (e.g. `AortaHemorrhage`) and would otherwise take over a link with the same name. With `point_reads` it is read like any other path: `circuits/cardiovascular_points/paths/VivaAddedShunt/flow_mL_per_min`. It reads 0 at load, because the path is first solved on the first step.
+- The joined compartments' regional flows include the added path (here `central/aorta/outflow_mL_per_min` and `central/vena_cava/inflow_mL_per_min`). Its resistance is fixed: the resistance multipliers and vascular tone don't scale it. A hemorrhage on a compartment the path feeds is larger, because Pulse sizes a bleed from the compartment's inflow.
+- Whole-body only. It combines with `patient_file` and `circuit_modifiers`: the path is added to the state they produce. The process reads (and, if needed, stabilizes) that state when it is built, not on its first update.
+
 ## Pulse circuits
 
 Pulse models physiology as lumped-parameter circuits. `pulse_cardiovascular` exposes the cardiovascular circuit below. Its `central`, `renal` and `peripheral` sub-stores follow the diagram's branches.

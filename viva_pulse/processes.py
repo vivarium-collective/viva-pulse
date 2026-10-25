@@ -9,6 +9,7 @@ from typing import Any, Callable
 from process_bigraph import Process, Step
 
 from .circuits import ENGINE_MODEL_TYPES, MODULES
+from .circuits.additions import add_paths, check_additions
 from .circuits.base import check_outputs
 from .circuits.cardiovascular import HEMORRHAGE_COMPARTMENTS
 from .patients import stabilized_state
@@ -97,6 +98,7 @@ def _check_whole_body_start(config: dict, schema: dict) -> None:
            if isinstance(m, bool) or not isinstance(m, (int, float)) or not math.isfinite(m) or m <= 0}
     if bad:
         raise ValueError(f"circuit_modifiers must be finite numbers > 0, got {bad}")
+    check_additions(config["circuit_additions"])
     if config["circuit_modifiers"] and config["state_file"] != schema["state_file"]["_default"]:
         raise ValueError(f"circuit_modifiers apply when Pulse stabilizes a patient, so they need "
                          f"patient_file; state_file {config['state_file']!r} is a stabilized state")
@@ -177,6 +179,9 @@ class PulseProcess(Process):
         "state_file": {"_type": "string", "_default": "StandardMale@0s.json"},
         "patient_file": {"_type": "string", "_default": "StandardMale.json"},
         "circuit_modifiers": {"_type": "map[float]", "_default": {}},
+        "circuit_additions": {"_type": "map", "_value": {"source": "string", "target": "string",
+                                                         "resistance_mmHg_s_per_mL": "float"},
+                              "_default": {}},
         "install_dir": {"_type": "string", "_default": ""},
         "hemorrhage_compartment": {"_type": "string", "_default": "RightLeg"},
         "iv_compound": {"_type": "string", "_default": "Saline"},
@@ -192,6 +197,11 @@ class PulseProcess(Process):
                 f"got {self.config['hemorrhage_compartment']!r}"
             )
         self._engine = None
+        self._state = None
+        if self.config["circuit_additions"]:
+            self._state = _read_state(self.config["install_dir"],
+                                      _whole_body_state(self.config, self.config_schema))
+            add_paths(self._state, self.config["circuit_additions"])
         self._alive = True
         self._applied: dict[str, float] = {"hemorrhage_severity": 0.0, "iv_rate_mL_per_min": 0.0}
         self._previous: dict[str, float] = {}
@@ -237,8 +247,12 @@ class PulseProcess(Process):
             unit = getattr(getattr(scalars, unit_cls), unit_name) if unit_cls and unit_name else None
             requests.append(SEDataRequest.create_physiology_request(prop, unit=unit))
 
-        self._engine = _load_engine(self.config["install_dir"], "HumanAdultWholeBody",
-                                    _whole_body_state(self.config, self.config_schema), requests)
+        if self._state is not None:
+            self._engine = _load_state(self.config["install_dir"], "HumanAdultWholeBody", self._state, requests)
+            self._state = None  # loaded; the parsed state is no longer needed
+        else:
+            self._engine = _load_engine(self.config["install_dir"], "HumanAdultWholeBody",
+                                        _whole_body_state(self.config, self.config_schema), requests)
         return self._engine
 
     def _read_vitals(self) -> dict[str, float]:
@@ -307,6 +321,9 @@ def _circuit_config_schema() -> dict[str, Any]:
         "state_file": {"_type": "string", "_default": "StandardMale@0s.json"},
         "patient_file": {"_type": "string", "_default": "StandardMale.json"},
         "circuit_modifiers": {"_type": "map[float]", "_default": {}},
+        "circuit_additions": {"_type": "map", "_value": {"source": "string", "target": "string",
+                                                         "resistance_mmHg_s_per_mL": "float"},
+                              "_default": {}},
         "max_settle_s": {"_type": "float", "_default": 30.0},
         "install_dir": {"_type": "string", "_default": ""},
     }
@@ -391,6 +408,8 @@ class PulseCircuitProcess(Process):
                              f"{model_type!r}, which starts from patient_file")
         elif self.config["circuit_modifiers"]:
             raise ValueError(f"circuit_modifiers are supported on whole_body only, not {model_type!r}")
+        elif self.config["circuit_additions"]:
+            raise ValueError(f"circuit_additions are supported on whole_body only, not {model_type!r}")
         names = list(self.config["modules"])
         if not names:
             raise ValueError(f"modules must name at least one of {sorted(MODULES)}")
@@ -407,12 +426,14 @@ class PulseCircuitProcess(Process):
             if module.check_config:
                 module.check_config(self.config)
 
-        # Modules whose outputs depend on the state edit a parsed copy of it, which
-        # is then what the engine loads (see CircuitModule.prepare_state).
+        # Added paths, and modules whose outputs depend on the state, edit a parsed copy
+        # of it, which is then what the engine loads (see CircuitModule.prepare_state).
+        # Paths are added first, so point reads cover them.
         self._state = None
         outputs = {module.name: module.outputs for module in self._modules}
-        if any(module.prepare_state for module in self._modules):
+        if self.config["circuit_additions"] or any(module.prepare_state for module in self._modules):
             self._state = _read_state(self.config["install_dir"], _whole_body_state(self.config, self.config_schema))
+            add_paths(self._state, self.config["circuit_additions"])
             for module in self._modules:
                 if module.prepare_state:
                     outputs[module.name] = module.prepare_state(self.config, self._state)

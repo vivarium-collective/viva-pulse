@@ -99,6 +99,36 @@ doc = pulse_cardiovascular(core, circuit_modifiers={"Aorta1ToBone1": 5.0})
   for Pulse's own modifiers. It starts from `patient_file` (default StandardMale), so a non-default
   `state_file` together with modifiers raises an error. Whole-body only.
 
+## Circuit additions
+
+`circuit_additions` adds resistance paths to the cardiovascular circuit of the loaded state,
+for example an arteriovenous shunt. It is accepted wherever `circuit_modifiers` is:
+
+```python
+doc = pulse_cardiovascular(core, circuit_additions={
+    "Shunt": {"source": "Aorta1", "target": "VenaCava1", "resistance_mmHg_s_per_mL": 0.5}})
+```
+
+- An addition is a perturbation of the loaded patient, not a new patient: nothing is
+  re-stabilized, and the body responds over time. This shunt carries about 150 mL/s, and at
+  60 s MAP is 73 mmHg (from 95), HR 135 bpm (from 72) and CO 10.5 L/min (from 5.8).
+- Pulse solves a path in its circuits but moves substances only over its compartment graph,
+  so each addition also gets a compartment link. Without it, blood would move along the path
+  without its substances (arterial PO2 334 mmHg).
+- Accepted: a resistance path (finite, > 0) between two `FullCardiovascular` nodes in
+  different vascular compartments, meaning in both Pulse's `Cardiovascular` and
+  `ActiveCardiovascular` graphs, except `AbdominalCavity`. Anything else (`Ground`, tissue
+  fluid, lymph, renal and urinary compartments, one compartment) raises when the process is
+  built. Path removal is never supported (Pulse crashes).
+- In the state, the addition `Shunt` becomes path and link `VivaAddedShunt`, so a name Pulse
+  creates at run time (e.g. `AortaHemorrhage`) can't take it over. With `point_reads` it is
+  read like any other path; it reads 0 at load, before the first solve.
+- The joined compartments' regional flows include the added path. Its resistance is fixed:
+  the resistance multipliers and vascular tone don't scale it. A hemorrhage on a compartment
+  the path feeds is larger, because Pulse sizes a bleed from the compartment's inflow.
+- Whole-body only. It combines with `patient_file` and `circuit_modifiers`. The process reads
+  that state when it is built.
+
 ## `MapFluidController`: a closed-loop Step
 
 A proportional controller. It sets the IV infusion rate to
