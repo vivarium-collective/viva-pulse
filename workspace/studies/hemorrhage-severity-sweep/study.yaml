@@ -38,23 +38,23 @@ baseline:
     n_steps: 600
 variants:
 - name: severity-0.0
-  base_composite: severity-0.8
+  composite: viva_pulse.composites.hemorrhage.pulse_hemorrhage
   parameter_overrides:
     severity: 0.0
 - name: severity-0.2
-  base_composite: severity-0.8
+  composite: viva_pulse.composites.hemorrhage.pulse_hemorrhage
   parameter_overrides:
     severity: 0.2
 - name: severity-0.4
-  base_composite: severity-0.8
+  composite: viva_pulse.composites.hemorrhage.pulse_hemorrhage
   parameter_overrides:
     severity: 0.4
 - name: severity-0.6
-  base_composite: severity-0.8
+  composite: viva_pulse.composites.hemorrhage.pulse_hemorrhage
   parameter_overrides:
     severity: 0.6
 - name: severity-1.0
-  base_composite: severity-0.8
+  composite: viva_pulse.composites.hemorrhage.pulse_hemorrhage
   parameter_overrides:
     severity: 1.0
 readouts:
@@ -349,35 +349,35 @@ simulation_set:
   - hemorrhage-severity
 - name: severity-0.0
   kind: single
-  base_model: severity-0.8
+  base_model: viva_pulse.composites.hemorrhage.pulse_hemorrhage
   perturbation:
     severity: 0.0
   status: ran
   metrics: *id001
 - name: severity-0.2
   kind: single
-  base_model: severity-0.8
+  base_model: viva_pulse.composites.hemorrhage.pulse_hemorrhage
   perturbation:
     severity: 0.2
   status: ran
   metrics: *id001
 - name: severity-0.4
   kind: single
-  base_model: severity-0.8
+  base_model: viva_pulse.composites.hemorrhage.pulse_hemorrhage
   perturbation:
     severity: 0.4
   status: ran
   metrics: *id001
 - name: severity-0.6
   kind: single
-  base_model: severity-0.8
+  base_model: viva_pulse.composites.hemorrhage.pulse_hemorrhage
   perturbation:
     severity: 0.6
   status: ran
   metrics: *id001
 - name: severity-1.0
   kind: single
-  base_model: severity-0.8
+  base_model: viva_pulse.composites.hemorrhage.pulse_hemorrhage
   perturbation:
     severity: 1.0
   status: ran

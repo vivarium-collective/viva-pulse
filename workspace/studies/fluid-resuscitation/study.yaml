@@ -119,6 +119,15 @@ expected_behavior:
   condition: both treated arms end with more blood volume and a higher MAP than the
     untreated arm
   test: tests/test_resuscitation.py::test_treated_arms_preserve_blood_volume, test_treated_arms_preserve_pressure
+visualizations:
+- name: resuscitation-response
+  address: local:FluidResuscitationResponse
+  config:
+    inputs_map:
+      time: global_time
+      mean_arterial_pressure: vitals.mean_arterial_pressure_mmHg
+      blood_volume: vitals.blood_volume_mL
+      iv_rate: interventions.iv_rate_mL_per_min
 comparative_visualizations:
 - name: map-by-arm
   title: MAP-targeted infusion slows the fall in arterial pressure

@@ -38,83 +38,83 @@ baseline:
     n_steps: 600
 variants:
 - name: Bradycardic
-  base_composite: StandardMale
+  composite: viva_pulse.composites.hemorrhage.pulse_hemorrhage
   parameter_overrides:
     state_file: Bradycardic@0s.json
 - name: Carol
-  base_composite: StandardMale
+  composite: viva_pulse.composites.hemorrhage.pulse_hemorrhage
   parameter_overrides:
     state_file: Carol@0s.json
 - name: Cynthia
-  base_composite: StandardMale
+  composite: viva_pulse.composites.hemorrhage.pulse_hemorrhage
   parameter_overrides:
     state_file: Cynthia@0s.json
 - name: DefaultFemale
-  base_composite: StandardMale
+  composite: viva_pulse.composites.hemorrhage.pulse_hemorrhage
   parameter_overrides:
     state_file: DefaultFemale@0s.json
 - name: DefaultMale
-  base_composite: StandardMale
+  composite: viva_pulse.composites.hemorrhage.pulse_hemorrhage
   parameter_overrides:
     state_file: DefaultMale@0s.json
 - name: ExtremeFemale
-  base_composite: StandardMale
+  composite: viva_pulse.composites.hemorrhage.pulse_hemorrhage
   parameter_overrides:
     state_file: ExtremeFemale@0s.json
 - name: ExtremeMale
-  base_composite: StandardMale
+  composite: viva_pulse.composites.hemorrhage.pulse_hemorrhage
   parameter_overrides:
     state_file: ExtremeMale@0s.json
 - name: Gus
-  base_composite: StandardMale
+  composite: viva_pulse.composites.hemorrhage.pulse_hemorrhage
   parameter_overrides:
     state_file: Gus@0s.json
 - name: Hassan
-  base_composite: StandardMale
+  composite: viva_pulse.composites.hemorrhage.pulse_hemorrhage
   parameter_overrides:
     state_file: Hassan@0s.json
 - name: Jane
-  base_composite: StandardMale
+  composite: viva_pulse.composites.hemorrhage.pulse_hemorrhage
   parameter_overrides:
     state_file: Jane@0s.json
 - name: Jeff
-  base_composite: StandardMale
+  composite: viva_pulse.composites.hemorrhage.pulse_hemorrhage
   parameter_overrides:
     state_file: Jeff@0s.json
 - name: Joel
-  base_composite: StandardMale
+  composite: viva_pulse.composites.hemorrhage.pulse_hemorrhage
   parameter_overrides:
     state_file: Joel@0s.json
 - name: Nathan
-  base_composite: StandardMale
+  composite: viva_pulse.composites.hemorrhage.pulse_hemorrhage
   parameter_overrides:
     state_file: Nathan@0s.json
 - name: Overweight
-  base_composite: StandardMale
+  composite: viva_pulse.composites.hemorrhage.pulse_hemorrhage
   parameter_overrides:
     state_file: Overweight@0s.json
 - name: Rick
-  base_composite: StandardMale
+  composite: viva_pulse.composites.hemorrhage.pulse_hemorrhage
   parameter_overrides:
     state_file: Rick@0s.json
 - name: Soldier
-  base_composite: StandardMale
+  composite: viva_pulse.composites.hemorrhage.pulse_hemorrhage
   parameter_overrides:
     state_file: Soldier@0s.json
 - name: StandardFemale
-  base_composite: StandardMale
+  composite: viva_pulse.composites.hemorrhage.pulse_hemorrhage
   parameter_overrides:
     state_file: StandardFemale@0s.json
 - name: Tachycardic
-  base_composite: StandardMale
+  composite: viva_pulse.composites.hemorrhage.pulse_hemorrhage
   parameter_overrides:
     state_file: Tachycardic@0s.json
 - name: Underweight
-  base_composite: StandardMale
+  composite: viva_pulse.composites.hemorrhage.pulse_hemorrhage
   parameter_overrides:
     state_file: Underweight@0s.json
 - name: Ventilated
-  base_composite: StandardMale
+  composite: viva_pulse.composites.hemorrhage.pulse_hemorrhage
   parameter_overrides:
     state_file: Ventilated@0s.json
 readouts:
@@ -820,140 +820,140 @@ simulation_set:
   - irreversible-state
 - name: Bradycardic
   kind: single
-  base_model: StandardMale
+  base_model: viva_pulse.composites.hemorrhage.pulse_hemorrhage
   perturbation:
     state_file: Bradycardic@0s.json
   status: ran
   metrics: *id001
 - name: Carol
   kind: single
-  base_model: StandardMale
+  base_model: viva_pulse.composites.hemorrhage.pulse_hemorrhage
   perturbation:
     state_file: Carol@0s.json
   status: ran
   metrics: *id001
 - name: Cynthia
   kind: single
-  base_model: StandardMale
+  base_model: viva_pulse.composites.hemorrhage.pulse_hemorrhage
   perturbation:
     state_file: Cynthia@0s.json
   status: ran
   metrics: *id001
 - name: DefaultFemale
   kind: single
-  base_model: StandardMale
+  base_model: viva_pulse.composites.hemorrhage.pulse_hemorrhage
   perturbation:
     state_file: DefaultFemale@0s.json
   status: ran
   metrics: *id001
 - name: DefaultMale
   kind: single
-  base_model: StandardMale
+  base_model: viva_pulse.composites.hemorrhage.pulse_hemorrhage
   perturbation:
     state_file: DefaultMale@0s.json
   status: ran
   metrics: *id001
 - name: ExtremeFemale
   kind: single
-  base_model: StandardMale
+  base_model: viva_pulse.composites.hemorrhage.pulse_hemorrhage
   perturbation:
     state_file: ExtremeFemale@0s.json
   status: ran
   metrics: *id001
 - name: ExtremeMale
   kind: single
-  base_model: StandardMale
+  base_model: viva_pulse.composites.hemorrhage.pulse_hemorrhage
   perturbation:
     state_file: ExtremeMale@0s.json
   status: ran
   metrics: *id001
 - name: Gus
   kind: single
-  base_model: StandardMale
+  base_model: viva_pulse.composites.hemorrhage.pulse_hemorrhage
   perturbation:
     state_file: Gus@0s.json
   status: ran
   metrics: *id001
 - name: Hassan
   kind: single
-  base_model: StandardMale
+  base_model: viva_pulse.composites.hemorrhage.pulse_hemorrhage
   perturbation:
     state_file: Hassan@0s.json
   status: ran
   metrics: *id001
 - name: Jane
   kind: single
-  base_model: StandardMale
+  base_model: viva_pulse.composites.hemorrhage.pulse_hemorrhage
   perturbation:
     state_file: Jane@0s.json
   status: ran
   metrics: *id001
 - name: Jeff
   kind: single
-  base_model: StandardMale
+  base_model: viva_pulse.composites.hemorrhage.pulse_hemorrhage
   perturbation:
     state_file: Jeff@0s.json
   status: ran
   metrics: *id001
 - name: Joel
   kind: single
-  base_model: StandardMale
+  base_model: viva_pulse.composites.hemorrhage.pulse_hemorrhage
   perturbation:
     state_file: Joel@0s.json
   status: ran
   metrics: *id001
 - name: Nathan
   kind: single
-  base_model: StandardMale
+  base_model: viva_pulse.composites.hemorrhage.pulse_hemorrhage
   perturbation:
     state_file: Nathan@0s.json
   status: ran
   metrics: *id001
 - name: Overweight
   kind: single
-  base_model: StandardMale
+  base_model: viva_pulse.composites.hemorrhage.pulse_hemorrhage
   perturbation:
     state_file: Overweight@0s.json
   status: ran
   metrics: *id001
 - name: Rick
   kind: single
-  base_model: StandardMale
+  base_model: viva_pulse.composites.hemorrhage.pulse_hemorrhage
   perturbation:
     state_file: Rick@0s.json
   status: ran
   metrics: *id001
 - name: Soldier
   kind: single
-  base_model: StandardMale
+  base_model: viva_pulse.composites.hemorrhage.pulse_hemorrhage
   perturbation:
     state_file: Soldier@0s.json
   status: ran
   metrics: *id001
 - name: StandardFemale
   kind: single
-  base_model: StandardMale
+  base_model: viva_pulse.composites.hemorrhage.pulse_hemorrhage
   perturbation:
     state_file: StandardFemale@0s.json
   status: ran
   metrics: *id001
 - name: Tachycardic
   kind: single
-  base_model: StandardMale
+  base_model: viva_pulse.composites.hemorrhage.pulse_hemorrhage
   perturbation:
     state_file: Tachycardic@0s.json
   status: ran
   metrics: *id001
 - name: Underweight
   kind: single
-  base_model: StandardMale
+  base_model: viva_pulse.composites.hemorrhage.pulse_hemorrhage
   perturbation:
     state_file: Underweight@0s.json
   status: ran
   metrics: *id001
 - name: Ventilated
   kind: single
-  base_model: StandardMale
+  base_model: viva_pulse.composites.hemorrhage.pulse_hemorrhage
   perturbation:
     state_file: Ventilated@0s.json
   status: ran
