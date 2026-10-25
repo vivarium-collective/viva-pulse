@@ -26,12 +26,13 @@ name: Publish investigation reports
 # One-time setup: Settings → Pages → Source = gh-pages (the publish-dashboard
 # workflow creates the branch on its first run).
 
-# viva-pulse: manual trigger only (2026-10-23) until GitHub Pages is set up for
-# this private repo. The template triggers on pushes to main; restore that
-# `push:` block once Pages is configured. This is a hand edit, which the
-# provenance guard does not detect; re-scaffolding this workflow restores the
-# push trigger.
 on:
+  push:
+    branches: [main]
+    paths:
+      - 'workspace/**'
+      - 'scripts/publish_investigation_reports.py'
+      - '.github/workflows/publish-reports.yml'
   workflow_dispatch:
 
 concurrency:
