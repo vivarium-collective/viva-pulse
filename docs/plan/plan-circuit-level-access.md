@@ -138,13 +138,14 @@ The choice between them is the user's: "what if this patient had it" or "what ha
 
 ## Recommended order
 
-1. Point reads (1): native, free, and covered by existing contracts.
-2. Instant patients (5): small and independent. It is also the base for the modifier route (2).
-3. Value changes (2), after the user picks the meaning.
+1. Point reads (1): native, free, and covered by existing contracts. Done (PR #8).
+2. Instant patients (5): small and independent. It is also the base for the modifier route (2). Done (PR #9).
+3. Value changes (2), after the user picks the meaning. The user picked the modifier route (a re-stabilized patient); done as `circuit_modifiers`, through the `PyPulse.Engine` binding's `set_configuration_override` instead of the private handle the probe used.
 4. Path additions (3), only after the link and transport probe. Removals stay refused.
 
 Separate cardiovascular (4) waits on Kitware.
 
 New Pulse findings, not yet drafted (external, for the user to decide on):
 - binary `serialize_to_string` and pickling a `PulseEngine` raise `UnicodeDecodeError`;
-- the Python `PulseConfiguration` doesn't expose `Modifiers` or `Overrides`.
+- the Python `PulseConfiguration` doesn't expose `Modifiers` or `Overrides`;
+- `keep_log_messages(True)` on a `PyPulse.Engine` intermittently corrupts the heap during `initialize_engine` (macOS malloc SIGTRAP in `RespiratoryModel::TuneCircuit`; 3 of 12 runs with it, 0 of 12 without, after another engine was loaded in the process).

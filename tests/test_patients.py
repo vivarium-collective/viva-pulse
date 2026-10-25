@@ -221,6 +221,14 @@ def test_every_generator_with_state_file_passes_patient_file(generator):
     assert doc["pulse"]["config"]["patient_file"] == "Gus.json"
 
 
+@pytest.mark.parametrize("generator", GENERATORS, ids=lambda g: g.__name__)
+def test_every_generator_passes_circuit_modifiers(generator):
+    """Falsifies: a generator drops circuit_modifiers, so its runs use the unmodified patient."""
+    assert "circuit_modifiers" in inspect.signature(generator).parameters
+    doc = generator(build_core(), circuit_modifiers={"Aorta1ToBone1": 2.0})
+    assert doc["pulse"]["config"]["circuit_modifiers"] == {"Aorta1ToBone1": 2.0}
+
+
 def test_composite_runs_the_patient_from_the_cache(cache, patient, first_load, run_composite):
     """Falsifies: patient_file stops at the generator, or the composite does not load the
     cached state (a new stabilization would replace the cache file)."""

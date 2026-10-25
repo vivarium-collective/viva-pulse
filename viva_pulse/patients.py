@@ -13,13 +13,24 @@ The cache key covers everything the stabilized state depends on:
   the SHA-256 of the loaded ``PyPulse`` binary (Pulse is linked into it
   statically, so any code change shows up there, committed or not), and the
   SHA-256 of the data files initialization reads (``DATA_DIRS``);
-- the engine model type.
+- the engine model type;
+- the requested circuit modifiers, when any are given (Pulse's own modifiers,
+  which they scale, are fixed by the install).
+
+Circuit modifiers are Pulse's own configuration ``Modifiers``: multipliers on
+the resistance or compliance baseline of a circuit path, or the volume
+baseline of a node, applied before stabilization. Stabilization then re-tunes
+the rest of the circulation to the patient's baselines, so the result is a
+different patient, not a perturbed one. Pulse's Python ``PulseConfiguration``
+has no ``Modifiers`` field, so the override is passed as JSON to the
+``PyPulse.Engine`` binding.
 """
 
 from __future__ import annotations
 
 import functools
 import hashlib
+import json
 import os
 import tempfile
 from pathlib import Path
@@ -109,8 +120,18 @@ def install_identity(install_dir: str = "") -> str:
             f"{_data_digest(str(bin_dir))}")
 
 
-def stabilized_state(patient_file: str, install_dir: str = "") -> Path:
+def stabilized_state(patient_file: str, install_dir: str = "",
+                     modifiers: dict[str, float] | None = None) -> Path:
     """Return the path of a stabilized whole-body state for ``patient_file``.
+
+    ``modifiers`` maps a circuit path or node name to a multiplier on the value
+    Pulse initializes it with. Pulse already ships modifiers of its own; the
+    multiplier scales Pulse's modifier for that name (1 where it has none), and
+    Pulse's other modifiers are kept. They are read from the patient's
+    unmodified stabilized state, which this install wrote, so on a miss that
+    state is stabilized (and cached) first. Pulse rejects a name that is not on its
+    respiratory or active cardiovascular circuit, or a path with no resistance
+    or compliance baseline.
 
     The state is looked up in ``cache_dir()`` by its cache key (see the module
     docstring). On a miss, the patient is stabilized with Pulse's
@@ -123,21 +144,46 @@ def stabilized_state(patient_file: str, install_dir: str = "") -> Path:
     patient_path = resolve_patient_file(patient_file, install_dir)
     content = patient_path.read_bytes()
 
+    parts = [content, install_identity(install_dir).encode(), MODEL_TYPE.encode()]
+    if modifiers:
+        # Pulse's own modifiers are fixed by the install, so the request completes the key.
+        parts.append(json.dumps({name: float(m) for name, m in modifiers.items()}, sort_keys=True).encode())
+
     key = hashlib.sha256()
-    for part in (content, install_identity(install_dir).encode(), MODEL_TYPE.encode()):
+    for part in parts:
         _update(key, part)
 
     directory = cache_dir()
     state_path = directory / f"{patient_path.stem}-{key.hexdigest()}@0s.json"
     if state_path.is_file():
         return state_path
+    override = None
+    if modifiers:
+        unmodified = json.loads(stabilized_state(patient_file, install_dir).read_text())
+        override = {name: scalar["Value"]
+                    for name, scalar in unmodified["Configuration"]["Modifiers"].items()}
+        for name, multiplier in modifiers.items():
+            override[name] = override.get(name, 1.0) * multiplier
     directory.mkdir(parents=True, exist_ok=True)
-    _stabilize(bin_dir, patient_path, content, state_path)
+    try:
+        _stabilize(bin_dir, patient_path, content, state_path, override)
+    except RuntimeError as error:
+        if modifiers:
+            raise RuntimeError(f"{error} with circuit modifiers {modifiers} (Pulse rejects a name that is "
+                               "not on its respiratory or active cardiovascular circuit, a path "
+                               "without a resistance or compliance, or a node without a volume; "
+                               "or the patient did not stabilize)") from error
+        raise
     return state_path
 
 
-def _stabilize(bin_dir: Path, patient_path: Path, content: bytes, state_path: Path) -> None:
+def _stabilize(bin_dir: Path, patient_path: Path, content: bytes, state_path: Path,
+               modifiers: dict[str, float] | None) -> None:
+    import PyPulse
     from pulse.cdm.engine import SEDataRequestManager
+    from pulse.cdm.enums import eSerializationFormat
+    from pulse.cdm.io.engine import (serialize_data_request_manager_to_string,
+                                     serialize_patient_configuration_to_string)
     from pulse.cdm.patient import SEPatientConfiguration
     from pulse.engine.PulseEngine import PulseEngine, eModelType
 
@@ -146,6 +192,7 @@ def _stabilize(bin_dir: Path, patient_path: Path, content: bytes, state_path: Pa
         os.close(fd)
         return path
 
+    JSON = PyPulse.serialization_format.json
     # Stabilize the exact bytes that were hashed, even if the file changes meanwhile.
     patient_copy = temporary(".patient.json")
     partial = temporary(".json")
@@ -155,9 +202,18 @@ def _stabilize(bin_dir: Path, patient_path: Path, content: bytes, state_path: Pa
         # Pulse takes the data root from the patient configuration (default "./").
         configuration.set_data_root_dir(f"{bin_dir}/")
         configuration.set_patient_file(patient_copy)
-        engine = PulseEngine(getattr(eModelType, MODEL_TYPE), f"{bin_dir}/")
+        engine = PyPulse.Engine(PyPulse.model_type.human_adult_whole_body, f"{bin_dir}/")
+        # Not keep_log_messages: with it, this build intermittently corrupts the heap
+        # during initialization (macOS malloc traps in TuneCircuit).
         engine.log_to_console(False)
-        if not engine.initialize_engine(configuration, SEDataRequestManager([])):
+        if modifiers and not engine.set_configuration_override(
+                json.dumps({"Modifiers": {name: {"Value": value} for name, value in modifiers.items()}}),
+                JSON):
+            raise RuntimeError(f"Pulse rejected the circuit modifiers {modifiers}")
+        if not engine.initialize_engine(
+                serialize_patient_configuration_to_string(configuration, eSerializationFormat.JSON),
+                serialize_data_request_manager_to_string(SEDataRequestManager([]), eSerializationFormat.JSON),
+                JSON):
             raise RuntimeError(f"Pulse failed to stabilize patient {patient_path}")
         if not engine.serialize_to_file(partial):
             raise RuntimeError(f"Pulse failed to save the stabilized state of {patient_path}")

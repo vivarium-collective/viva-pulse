@@ -93,15 +93,24 @@ def _check_whole_body_start(config: dict, schema: dict) -> None:
         raise ValueError(f"state_file {config['state_file']!r} and patient_file "
                          f"{config['patient_file']!r} are both set; a whole-body engine starts "
                          "from one of them")
+    bad = {name: m for name, m in config["circuit_modifiers"].items()
+           if isinstance(m, bool) or not isinstance(m, (int, float)) or not math.isfinite(m) or m <= 0}
+    if bad:
+        raise ValueError(f"circuit_modifiers must be finite numbers > 0, got {bad}")
+    if config["circuit_modifiers"] and config["state_file"] != schema["state_file"]["_default"]:
+        raise ValueError(f"circuit_modifiers apply when Pulse stabilizes a patient, so they need "
+                         f"patient_file; state_file {config['state_file']!r} is a stabilized state")
 
 
 def _whole_body_state(config: dict, schema: dict) -> str:
     """The state a whole-body engine loads: ``state_file``, or, when ``patient_file``
-    is set, the patient's stabilized state (an absolute path into the cache; see
-    ``viva_pulse.patients``)."""
-    if config["patient_file"] == schema["patient_file"]["_default"]:
+    or ``circuit_modifiers`` is set, the patient's stabilized state (an absolute
+    path into the cache; see ``viva_pulse.patients``)."""
+    if (config["patient_file"] == schema["patient_file"]["_default"]
+            and not config["circuit_modifiers"]):
         return config["state_file"]
-    return str(stabilized_state(config["patient_file"], config["install_dir"]))
+    return str(stabilized_state(config["patient_file"], config["install_dir"],
+                                dict(config["circuit_modifiers"])))
 
 
 def _initialize_engine(install_dir: str, model_type: str, patient_file: str, requests: list):
@@ -140,9 +149,10 @@ class PulseProcess(Process):
     ``interval`` seconds on every update. ``state_file`` names a state Pulse
     ships; setting ``patient_file`` instead (a name in ``<install>/bin/patients/``
     or a path) starts from that patient, stabilized once and then cached (see
-    ``viva_pulse.patients``). Setting both raises. Interventions arrive as setpoints on
-    the input ports and are forwarded to Pulse as patient actions only when
-    their value changes.
+    ``viva_pulse.patients``). Setting both raises. ``circuit_modifiers`` stabilizes
+    that patient with Pulse's configuration Modifiers (see ``stabilized_state``).
+    Interventions arrive as setpoints on the input ports and are forwarded to
+    Pulse as patient actions only when their value changes.
 
     Inputs
     ------
@@ -166,6 +176,7 @@ class PulseProcess(Process):
     config_schema = {
         "state_file": {"_type": "string", "_default": "StandardMale@0s.json"},
         "patient_file": {"_type": "string", "_default": "StandardMale.json"},
+        "circuit_modifiers": {"_type": "map[float]", "_default": {}},
         "install_dir": {"_type": "string", "_default": ""},
         "hemorrhage_compartment": {"_type": "string", "_default": "RightLeg"},
         "iv_compound": {"_type": "string", "_default": "Saline"},
@@ -295,6 +306,7 @@ def _circuit_config_schema() -> dict[str, Any]:
         "modules": {"_type": "list[string]", "_default": []},
         "state_file": {"_type": "string", "_default": "StandardMale@0s.json"},
         "patient_file": {"_type": "string", "_default": "StandardMale.json"},
+        "circuit_modifiers": {"_type": "map[float]", "_default": {}},
         "max_settle_s": {"_type": "float", "_default": 30.0},
         "install_dir": {"_type": "string", "_default": ""},
     }
@@ -349,7 +361,9 @@ class PulseCircuitProcess(Process):
 
     WholeBody loads a stabilized ``state_file``, or, when ``patient_file`` is
     set instead, that patient's state, stabilized once and then cached (see
-    ``viva_pulse.patients``); setting both raises. VentilationMechanics has no
+    ``viva_pulse.patients``); setting both raises. ``circuit_modifiers`` (circuit
+    path or node name -> multiplier) stabilizes the patient with Pulse's
+    configuration Modifiers, also cached; whole_body only. VentilationMechanics has no
     state files, so it initializes from ``patient_file`` and then settles (see
     ``_settle``) before t = 0; setting ``state_file`` on it raises, instead of
     being silently ignored.
@@ -375,6 +389,8 @@ class PulseCircuitProcess(Process):
         elif self.config["state_file"] != self.config_schema["state_file"]["_default"]:
             raise ValueError(f"state_file {self.config['state_file']!r} is not used by model_type "
                              f"{model_type!r}, which starts from patient_file")
+        elif self.config["circuit_modifiers"]:
+            raise ValueError(f"circuit_modifiers are supported on whole_body only, not {model_type!r}")
         names = list(self.config["modules"])
         if not names:
             raise ValueError(f"modules must name at least one of {sorted(MODULES)}")
