@@ -84,7 +84,9 @@ class ActionBinding:
     called with every port's current value plus the process config and returns
     the Pulse action to send. ``validate`` raises ``ValueError`` on bad values;
     ``check_transition(previous, values)`` raises ``ValueError`` on a change
-    Pulse cannot make (e.g. one its Python API silently drops).
+    Pulse cannot make (e.g. one its Python API silently drops). ``previous`` is
+    ``None`` when the loaded state already has the group's action active, with
+    values the process doesn't know.
     """
 
     ports: dict[str, float]

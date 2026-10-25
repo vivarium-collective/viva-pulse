@@ -5,4 +5,4 @@ Saving the engine's state at chosen times during a run, as ordinary Pulse state 
 that ``state_file`` loads again.
 
 .. automodule:: viva_pulse.states
-   :members: save_states, main, TIME_DECIMALS
+   :members: save_states, StateSaver, main, TIME_DECIMALS

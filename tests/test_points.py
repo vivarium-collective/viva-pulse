@@ -114,7 +114,7 @@ def test_path_flow_is_signed(run_composite):
 ACTIONS = {"hemorrhage_severity": 0.5, "intubated": 1.0, "connected": 1.0}
 
 
-def test_point_reads_leave_the_simulation_unchanged(run_composite):
+def test_point_reads_leave_the_simulation_unchanged(run_composite, assert_rows_close):
     """Falsifies: the added compartments and links perturb Pulse, including when actions make it
     rebuild its compartment links (a hemorrhage, an airway change to the ventilator): any reading
     of any module differs. Also falsifies: pulse_whole_body_circuits ignores point_reads."""
@@ -124,7 +124,8 @@ def test_point_reads_leave_the_simulation_unchanged(run_composite):
     assert set(points[-1]["circuits"]) - {"irreversible_state"} == modules | {"cardiovascular_points",
                                                                               "respiratory_points"}
     for module in modules:
-        assert [r["circuits"][module] for r in points] == [r["circuits"][module] for r in plain], module
+        # To 1e-9, not exactly: identical Pulse runs in one process can differ by ~1e-14.
+        assert_rows_close([r["circuits"][module] for r in points], [r["circuits"][module] for r in plain])
 
 
 def test_no_frozen_airway_flow_while_ventilated(run_composite):

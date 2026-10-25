@@ -13,6 +13,7 @@ from .circuits.additions import add_paths, check_additions
 from .circuits.base import check_outputs
 from .circuits.cardiovascular import HEMORRHAGE_COMPARTMENTS
 from .patients import stabilized_state
+from .states import StateSaver
 from .runtime import ensure_pulse_importable
 
 #: Output port -> (Pulse physiology property, scalar unit class, unit attribute on
@@ -115,6 +116,73 @@ def _whole_body_state(config: dict, schema: dict) -> str:
                                 dict(config["circuit_modifiers"])))
 
 
+def _actions_by_key(any_action: dict) -> dict[tuple, dict]:
+    """Each action of a serialized ``AnyAction`` list, keyed (category, type, identity).
+
+    Pulse keeps one active action of each type, except hemorrhages (one per compartment) and
+    compound infusions (one per compound) (``SEPatientActionCollection.h:166, 263``), which
+    the identity names.
+    """
+    actions = {}
+    for item in any_action.get("AnyAction", []):
+        ((category, body),) = item.items()
+        ((kind, fields),) = body.items()
+        actions[(category, kind, fields.get("Compartment") or fields.get("SubstanceCompound"))] = fields
+    return actions
+
+
+def _serialized(actions: list) -> dict[tuple, dict]:
+    from pulse.cdm.enums import eSerializationFormat
+    from pulse.cdm.io.engine import serialize_actions_to_string
+
+    return _actions_by_key(json.loads(serialize_actions_to_string(actions, eSerializationFormat.JSON)))
+
+
+def _active_actions(engine) -> tuple[dict[tuple, dict], str]:
+    """The loaded engine's active actions (a saved mid-run state carries them) and its airway
+    mode. Empty and Free for an engine Pulse can't serialize (VentilationMechanics, which
+    starts from a patient)."""
+    import PyPulse
+
+    state = engine.serialize_to_string(PyPulse.serialization_format.json)
+    if not state:
+        return {}, "Free"
+    state = json.loads(state)
+    return _actions_by_key(state.get("ActiveActions", {})), state.get("AirwayMode", "Free")
+
+
+def _loaded_controls(active: dict[tuple, dict], baseline: dict[str, float], build) -> bool:
+    """Whether the loaded state has an action active that this setpoint group sends.
+
+    A process sends an action only when its setpoint changes, assuming nothing is active
+    at load. A state saved mid-run breaks that: its bleed, infusion, ventilator or
+    modifiers are still active, so a branch setting one back to baseline would send
+    nothing while Pulse keeps applying it. Such a group is unknown (``None``) until its
+    first update, which sends it whatever its value (resending the active values doesn't
+    change the run: a mid-bleed checkpoint continued at the same severity agrees with the
+    uninterrupted run as closely as a plain reload, 1.8e-8; for the ventilator, multipliers,
+    oxygen and heating, a resend and no resend were measured identical). ``build(values)`` is called at
+    the baseline and with every zero-baseline port at 1, because an action can change type
+    with its value (a connected ventilator) or not serialize at baseline (an Off intubation).
+
+    An active action of the same type that the group can't address (a hemorrhage in another
+    compartment, an infusion of another compound) raises: the group's setpoint couldn't
+    stop it, and its store would say nothing is happening.
+    """
+    if not active:
+        return False
+    switched = {port: 1.0 if value == 0.0 else value for port, value in baseline.items()}
+    sends = _serialized([build(baseline), build(switched)]).keys()
+    kinds = {(category, kind) for category, kind, _ in sends}
+    other = sorted(f"{kind} ({identity})" for category, kind, identity in active.keys() - sends
+                   if (category, kind) in kinds)
+    if other:
+        raise ValueError(f"the loaded state has active {other}, which this process's setpoints "
+                         f"can't reach (it sends {sorted(f'{k} ({i})' for _, k, i in sends)}); "
+                         "configure the process for them (e.g. hemorrhage_compartment, iv_compound)")
+    return bool(active.keys() & sends)
+
+
 def _initialize_engine(install_dir: str, model_type: str, patient_file: str, requests: list):
     """Initialize a new engine of ``model_type`` from ``<install>/bin/patients/<patient_file>``.
 
@@ -182,6 +250,9 @@ class PulseProcess(Process):
         "circuit_additions": {"_type": "map", "_value": {"source": "string", "target": "string",
                                                          "resistance_mmHg_s_per_mL": "float"},
                               "_default": {}},
+        "save_state_times_s": {"_type": "list[float]", "_default": []},
+        "save_state_dir": {"_type": "string", "_default": ""},
+        "save_state_name": {"_type": "string", "_default": "state"},
         "install_dir": {"_type": "string", "_default": ""},
         "hemorrhage_compartment": {"_type": "string", "_default": "RightLeg"},
         "iv_compound": {"_type": "string", "_default": "Saline"},
@@ -197,13 +268,16 @@ class PulseProcess(Process):
                 f"got {self.config['hemorrhage_compartment']!r}"
             )
         self._engine = None
+        self._saver = (StateSaver(self.config["save_state_times_s"], self.config["save_state_dir"],
+                                  self.config["save_state_name"])
+                       if self.config["save_state_times_s"] else None)
         self._state = None
         if self.config["circuit_additions"]:
             self._state = _read_state(self.config["install_dir"],
                                       _whole_body_state(self.config, self.config_schema))
             add_paths(self._state, self.config["circuit_additions"])
         self._alive = True
-        self._applied: dict[str, float] = {"hemorrhage_severity": 0.0, "iv_rate_mL_per_min": 0.0}
+        self._applied: dict[str, float | None] = {"hemorrhage_severity": 0.0, "iv_rate_mL_per_min": 0.0}
         self._previous: dict[str, float] = {}
 
     def inputs(self):
@@ -253,6 +327,12 @@ class PulseProcess(Process):
         else:
             self._engine = _load_engine(self.config["install_dir"], "HumanAdultWholeBody",
                                         _whole_body_state(self.config, self.config_schema), requests)
+        active, _ = _active_actions(self._engine)
+        for port, baseline in self._applied.items():
+            if _loaded_controls(active, {port: baseline}, lambda values: self._action(port, values[port])):
+                self._applied[port] = None
+        if self._saver:
+            self._saver(self._engine)
         return self._engine
 
     def _read_vitals(self) -> dict[str, float]:
@@ -264,30 +344,38 @@ class PulseProcess(Process):
             self._previous = self._read_vitals()
         return dict(self._previous)
 
-    def _apply_interventions(self, engine, state):
+    def _action(self, port: str, value: float):
+        """The Pulse action for one setpoint."""
         from pulse.cdm.patient_actions import SEHemorrhage, SESubstanceCompoundInfusion
         from pulse.cdm.scalars import VolumePerTimeUnit, VolumeUnit
 
+        if port == "hemorrhage_severity":
+            action = SEHemorrhage()
+            action.set_compartment(self.config["hemorrhage_compartment"])
+            action.get_severity().set_value(value)
+            return action
+        action = SESubstanceCompoundInfusion()
+        action.set_compound(self.config["iv_compound"])
+        action.get_rate().set_value(value, VolumePerTimeUnit.mL_Per_min)
+        action.get_bag_volume().set_value(self.config["iv_bag_volume_L"], VolumeUnit.L)
+        return action
+
+    def _apply_interventions(self, engine, state):
         severity = float(state["hemorrhage_severity"])
         if severity != self._applied["hemorrhage_severity"]:
             if not 0.0 <= severity <= 1.0:
                 raise ValueError(f"hemorrhage_severity must be in [0, 1], got {severity}")
-            action = SEHemorrhage()
-            action.set_compartment(self.config["hemorrhage_compartment"])
-            action.get_severity().set_value(severity)
-            engine.process_action(action)
-            self._applied["hemorrhage_severity"] = severity
+            self._send(engine, "hemorrhage_severity", severity)
 
         rate = float(state["iv_rate_mL_per_min"])
         if rate != self._applied["iv_rate_mL_per_min"]:
             if rate < 0.0:
                 raise ValueError(f"iv_rate_mL_per_min must be >= 0, got {rate}")
-            action = SESubstanceCompoundInfusion()
-            action.set_compound(self.config["iv_compound"])
-            action.get_rate().set_value(rate, VolumePerTimeUnit.mL_Per_min)
-            action.get_bag_volume().set_value(self.config["iv_bag_volume_L"], VolumeUnit.L)
-            engine.process_action(action)
-            self._applied["iv_rate_mL_per_min"] = rate
+            self._send(engine, "iv_rate_mL_per_min", rate)
+
+    def _send(self, engine, port: str, value: float) -> None:
+        engine.process_action(self._action(port, value))
+        self._applied[port] = value
 
     def update(self, state, interval):
         engine = self._ensure_engine()
@@ -298,6 +386,8 @@ class PulseProcess(Process):
         if not engine.advance_time_s(float(interval)):
             self._alive = False
             return {"irreversible_state": True}
+        if self._saver:
+            self._saver(engine)
         current = self._read_vitals()
         self._previous = current
         return {name: current[name] - previous[name] for name in VITALS}
@@ -324,6 +414,9 @@ def _circuit_config_schema() -> dict[str, Any]:
         "circuit_additions": {"_type": "map", "_value": {"source": "string", "target": "string",
                                                          "resistance_mmHg_s_per_mL": "float"},
                               "_default": {}},
+        "save_state_times_s": {"_type": "list[float]", "_default": []},
+        "save_state_dir": {"_type": "string", "_default": ""},
+        "save_state_name": {"_type": "string", "_default": "state"},
         "max_settle_s": {"_type": "float", "_default": 30.0},
         "install_dir": {"_type": "string", "_default": ""},
     }
@@ -410,6 +503,12 @@ class PulseCircuitProcess(Process):
             raise ValueError(f"circuit_modifiers are supported on whole_body only, not {model_type!r}")
         elif self.config["circuit_additions"]:
             raise ValueError(f"circuit_additions are supported on whole_body only, not {model_type!r}")
+        elif self.config["save_state_times_s"]:
+            raise ValueError(f"save_state_times_s is supported on whole_body only, not {model_type!r} "
+                             "(Pulse doesn't serialize it)")
+        self._saver = (StateSaver(self.config["save_state_times_s"], self.config["save_state_dir"],
+                                  self.config["save_state_name"])
+                       if self.config["save_state_times_s"] else None)
         names = list(self.config["modules"])
         if not names:
             raise ValueError(f"modules must name at least one of {sorted(MODULES)}")
@@ -493,6 +592,19 @@ class PulseCircuitProcess(Process):
         else:
             engine = _load_engine(self.config["install_dir"], SUPPORTED_MODEL_TYPES[model_type],
                                   _whole_body_state(self.config, self.config_schema), requests)
+        active, airway_mode = _active_actions(engine)
+        for module in self._modules:
+            for i, binding in enumerate(module.bindings):
+                if _loaded_controls(active, dict(binding.ports), lambda values: binding.build(values, self.config)):
+                    self._applied[(module.name, i)] = None
+        # Equipment this process doesn't control holds the airway: connecting a device of
+        # ours would make every advance fail, so refuse the state if we have one.
+        devices = [(module, i) for module in self._modules if module.airway_device
+                   for i, binding in enumerate(module.bindings) if module.airway_device in binding.ports]
+        if airway_mode != "Free" and devices and all(self._applied[(m.name, i)] is not None for m, i in devices):
+            raise ValueError(f"the loaded state's airway is held by equipment this process doesn't "
+                             f"control (airway mode {airway_mode}), and Pulse allows one airway device; "
+                             f"connecting {[m.name for m, _ in devices]} would stall it")
         values = self._pull(engine)
         loaded = _nest([(path, values[i]) for path, i in self._slots])
         for module in self._modules:
@@ -500,6 +612,8 @@ class PulseCircuitProcess(Process):
                 module.check_loaded(loaded[module.name])
         self._engine = engine
         self._previous = values
+        if self._saver:
+            self._saver(engine)
         return engine
 
     def _settle(self, engine) -> None:
@@ -576,7 +690,9 @@ class PulseCircuitProcess(Process):
                 continue
             port = module.airway_device
             i = next(i for i, b in enumerate(module.bindings) if port in b.ports)
-            devices.append((module.name, self._applied[(module.name, i)][port] == 1.0,
+            applied = self._applied[(module.name, i)]
+            # An unknown device (its action active in the loaded state) counts as connected.
+            devices.append((module.name, applied is None or applied[port] == 1.0,
                             float(state["setpoints"][module.name][port]) == 1.0))
         now = [name for name, _, connected in devices if connected]
         if len(now) > 1:
@@ -597,6 +713,8 @@ class PulseCircuitProcess(Process):
         if not engine.advance_time_s(float(interval)):
             self._alive = False
             return {"irreversible_state": True}
+        if self._saver:
+            self._saver(engine)
         current = self._pull(engine)
         self._previous = current
         return self._tree(lambda i: current[i] - previous[i])

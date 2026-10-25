@@ -12,8 +12,9 @@ before the state loads, these modules add, for every selected point:
   ``Inflow - Outflow`` is the path's signed flow (``SEFluidCompartment.hxx``).
 
 Compartments and links only name what the circuit already holds: Pulse solves the
-same circuit, and a run with every point added is bit-identical to one without
-(``workspace/experiments/circuit-access-2026-10-24``, mode ``points``).
+same circuit, and a run with every point added matches one without (bit-identical in
+``workspace/experiments/circuit-access-2026-10-24``, mode ``points``; identical Pulse runs in one
+process can differ by about 1e-14, so the tests compare to 1e-9).
 
 The nodes and paths come from the loaded state's own ``CircuitManager``, so the
 names are Pulse's. An empty selection (the default) reads every node and path of

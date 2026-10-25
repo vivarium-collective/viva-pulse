@@ -147,8 +147,24 @@ python -m viva_pulse.states StandardMale@0s.json --times 60 120 --out states/
 - Each state is saved at the first Pulse step (0.02 s) at or after its time; two times within
   one step raise, and an existing file is never overwritten.
 - Whole-body engines only (Pulse doesn't serialize ventilation-mechanics). `save_states` drives
-  the engine it is given, so it is for an engine you hold; saving from a running composite is
-  not supported.
+  the engine it is given, so it is for an engine you hold.
+- In a composite, `PulseProcess` and `PulseCircuitProcess` save their own engine: set
+  `save_state_times_s`, `save_state_dir` and optionally `save_state_name` in their config.
+  The times are Pulse's simulation time, which continues from the loaded state. Each state is
+  saved at the first update boundary at or after its time. Saving never steps the engine, so
+  the run matches an unsaved one to 1e-9 relative (Pulse varies by about 1e-14 between
+  identical runs in one process). States of the same name already in
+  the directory raise when the composite is built. The generators don't take these options yet.
+- A new composite started from a saved state (`state_file`) continues it with the same
+  setpoints (1.8e-8 relative for a mid-bleed checkpoint; a ventilated one diverges more, from
+  Pulse's own reload). The state carries the actions active when it was saved, so each
+  setpoint group whose action is active there is sent on the branch's first update whatever
+  its value: a branch can stop the bleed or disconnect the ventilator. Refused at load: a bleed
+  or infusion the process isn't configured for (another compartment or compound), and, for a
+  process with an airway device, an airway held by equipment it doesn't control. Extubating an
+  intubated checkpoint raises, and `pulse_thermal` refuses a checkpoint whose environment was
+  changed.
+  The branch's composite time starts at 0, while Pulse's time continues from the save.
 - A state saved with point reads or `circuit_additions` contains their added names, so loading
   it with the same options again raises a name collision.
 

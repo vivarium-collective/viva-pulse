@@ -208,8 +208,9 @@ def _build_intubation(values: dict[str, float], config: dict[str, Any]):
     return action
 
 
-def _check_intubation_transition(previous: dict[str, float], values: dict[str, float]) -> None:
-    if previous["intubated"] == 1.0 and values["intubated"] == 0.0:
+def _check_intubation_transition(previous: dict[str, float] | None, values: dict[str, float]) -> None:
+    # previous is None when the loaded state already has an intubation active.
+    if (previous is None or previous["intubated"] == 1.0) and values["intubated"] == 0.0:
         raise ValueError(
             "extubation (intubated 1 -> 0) is not possible through Pulse's Python API: "
             "SEIntubation.is_valid() rejects type Off, so PulseEngine drops the action, "
