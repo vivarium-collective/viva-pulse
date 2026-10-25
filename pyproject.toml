@@ -23,6 +23,7 @@ dependencies = [
     "process-bigraph>=1.10",
     "numpy",
     "pandas",
+    "platformdirs",  # cache directory for stabilized patient states
     "protobuf",
     "bigraph-viz>=2.0.3",
     "pyyaml>=6.0",

@@ -133,17 +133,13 @@ def test_cardiovascular_module_is_rejected_on_ventilation_mechanics():
                             core=build_core())
 
 
-@pytest.mark.parametrize("model_type, key, value", [
-    ("ventilation_mechanics", "state_file", "StandardFemale@0s.json"),
-    ("whole_body", "patient_file", "StandardFemale.json"),
-])
-def test_start_file_the_engine_ignores_raises(model_type, key, value):
-    """Falsifies: a state file on VentilationMechanics (which has no serialization) or a
-    patient file on WholeBody (which loads a state) is silently ignored, so the run uses
-    a different patient than the one asked for."""
-    with pytest.raises(ValueError, match=f"{key} .* is not used by model_type"):
-        PulseCircuitProcess({"model_type": model_type, "modules": ["respiratory"], key: value},
-                            core=build_core())
+def test_state_file_on_ventilation_mechanics_raises():
+    """Falsifies: a state file on VentilationMechanics (which has no serialization) is
+    silently ignored, so the run uses a different patient than the one asked for.
+    (WholeBody takes either file; tests/test_patients.py covers it.)"""
+    with pytest.raises(ValueError, match="state_file .* is not used by model_type"):
+        PulseCircuitProcess({"model_type": "ventilation_mechanics", "modules": ["respiratory"],
+                             "state_file": "StandardFemale@0s.json"}, core=build_core())
 
 
 def test_default_setpoints_pass_their_validators():

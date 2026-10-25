@@ -10,5 +10,6 @@ processes
 composites
 circuits
 visualizations
+patients
 runtime
 ```
