@@ -18,3 +18,5 @@ setpoints drive (inputs).
 .. automodule:: viva_pulse.circuits.thermal
 
 .. automodule:: viva_pulse.circuits.supplemental_oxygen
+
+.. automodule:: viva_pulse.circuits.points

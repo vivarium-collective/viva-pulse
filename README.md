@@ -81,6 +81,10 @@ rows = gather_emitter_results(sim)[("emitter",)]
 
 All use `fidelity="real-bridge"`.
 
+- **Point reads.** `point_reads=True` on `pulse_cardiovascular`, `pulse_respiratory`, `pulse_mechanical_ventilation` (these two with `model_type="whole_body"`) or `pulse_whole_body_circuits` adds every node and path of the circuit drawings. Each node, e.g. `LeftHeart1`, gets its pressure and, where it holds one, its volume. Each path, e.g. `Aorta1ToBone1`, gets its signed flow. They appear under `circuits/cardiovascular_points/` and `circuits/respiratory_points/`. In every shipped state, the cardiovascular circuit has 124 nodes and 212 paths, and the respiratory one 24 nodes and 34 paths. Two exceptions:
+  - Paths Pulse adds during a run, such as a hemorrhage's bleed path, aren't included.
+  - With a ventilator or oxygen module on the same engine, the two airway openings are left out, because Pulse stops solving them while a device is connected.
+
 - **Whole-body runs** load Pulse's stabilized state files (`<install>/bin/states/*.json`, default `StandardMale@0s.json`).
 - **Ventilation-mechanics runs** have no state files. They start from a patient file (`<install>/bin/patients/*.json`, default `StandardMale.json`), then settle before t=0 until every requested value is defined, which takes about one breath.
 - Setting the file the chosen engine doesn't use (a `state_file` on ventilation-mechanics, a `patient_file` on whole-body) raises an error instead of being ignored.
@@ -97,7 +101,8 @@ All use `fidelity="real-bridge"`.
   - Each module's readings are a nested subtree of `float` delta ports. For example, `cardiovascular/central/aorta/pressure_mmHg` is wired to `circuits/cardiovascular/...`.
   - Its setpoints sit under the `setpoints` input port and are wired to `interventions/<module>/...`. Each defaults to its baseline (multipliers 1.0, hemorrhage 0.0) and is sent to Pulse only when it changes.
   - Identical requests from several modules share one Pulse request. A request Pulse cannot serve fails the load, or the update where it appears, instead of emitting NaN.
-  - `model_type` selects the engine: `whole_body`, or `ventilation_mechanics`, which has the airway only (no blood or chemoreflex). Each module declares which engines it supports; `thermal` and `supplemental_oxygen` run on `whole_body` only.
+  - `model_type` selects the engine: `whole_body`, or `ventilation_mechanics`, which has the airway only (no blood or chemoreflex). Each module declares which engines it supports; `thermal`, `supplemental_oxygen` and the two `*_points` modules run on `whole_body` only.
+  - The `cardiovascular_points` and `respiratory_points` modules read single circuit nodes and paths. By default they read every one. The config lists `cardiovascular_point_nodes` / `cardiovascular_point_paths` (and the `respiratory_` pair) narrow that to the names given. Pulse has no data request for a node or path, so before loading, the process adds a compartment for each node and a link for each path to the state, and reads them with ordinary requests. The simulation is unchanged (bit-identical with and without them).
   - Pulse allows one airway device at a time. A second one connecting makes every engine step fail, so the process raises instead: when the ventilator and oxygen are both connected, or when one connects in the same update the other disconnects. To switch devices, disconnect one update before connecting the other.
 - **`MapFluidController`**: a proportional `Step` that maps mean arterial pressure to IV infusion rate.
 
@@ -266,8 +271,10 @@ The existing Pulse python binding (`src/python/*`) is a light wrapper, not a 1:1
    Anesthesia-machine and inhaler actions are missing, for example, as is the circuit-override action.
 
 So Python can do what a scenario file can: load a patient, apply actions, step time, and read named values (whole-body vitals, region pressures, volumes, flows
-and substances). It can't reach inside the engine, which is why the circuit composites work at the region level, not node by node. Making it closer to 1:1
-would mean writing new pybind bindings in ../engine. That's the "bind more of the C++" option we set aside.
+and substances). It can't reach inside the engine. Single nodes and paths are still readable, because a state file names Pulse's compartments and links, and a
+compartment can hold one node and a link one path; the `*_points` modules add those before loading (see "Point reads" above). What stays out of reach
+without new pybind bindings in ../engine is changing the model itself: rewiring circuits, or running the cardiovascular circuit on its own. The scope is in
+`docs/plan/plan-circuit-level-access.md`.
 
 ## ...Electrical circuits
 

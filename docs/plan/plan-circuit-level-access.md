@@ -74,6 +74,12 @@ Details of the modifier route:
 
 ### 1. Read individual points: feasible now, native, free
 
+**Implemented 2026-10-25** as the `cardiovascular_points` and `respiratory_points` modules (`viva_pulse/circuits/points.py`), with the user's choices: config lists where empty means all, covering cardiovascular and respiratory. Two details came out of the full-scale probe (mode `points`: 640 compartments, 716 requests, relative error ≤1.7e-16, bit-identical vitals):
+- Each path gets its own source and target compartment. A compartment's `Inflow` sums all of its links, so a target shared by two paths would mix their flows. With one link per target, `Inflow - Outflow` is that path's signed flow.
+- A node's volume is read only where it is finite. `Ambient` holds an infinite volume, and inf - inf would turn its delta store NaN.
+
+The design notes below are the pre-implementation plan.
+
 **Design.** A circuit module whose outputs are ordinary `Request`s on read-only compartments and links that the process adds to the state before loading.
 
 - Each named node becomes a single-node compartment, and each named path a link between two such compartments.

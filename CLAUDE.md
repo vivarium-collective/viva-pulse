@@ -72,6 +72,18 @@ The per-circuit composite plan (approved 2026-10-22) is [docs/plan/plan-circuit-
     - 4 outputs under `oxygenation/`: FiO2, SpO2, PaO2, PaCO2. Device gas compartments are not exposed: the nasal cannula's pressure is NaN while it is off.
     - Setpoints `oxygen_connected` and `oxygen_flow_L_per_min`; device type from config `oxygen_device`.
     - Sent as `SESupplementalOxygen`: device `None` when disconnected (Pulse removes it), with wall supply (volume `inf`). A finite bottle would refill on every resend.
+  - `points.py`: `cardiovascular_points` (circuit `FullCardiovascular`, 124 nodes, 212 paths) and `respiratory_points` (`Respiratory`, 24 nodes, 34 paths). whole_body only.
+    - Pulse has no node/path data request. The module's `prepare_state(config, state)` (a `CircuitModule` hook used instead of static `outputs`) adds to the parsed state JSON:
+      - a single-node compartment `VivaPointNode<node>` per node;
+      - per path, compartments `VivaPointFrom/To<path>` joined by a link `VivaPointLink<path>`.
+    - `PulseCircuitProcess` reads the state in `__init__` (`_read_state`) and loads the edited copy (`_load_state`, `serialize_from_string`).
+    - Path flow is `Inflow - Outflow` of the dedicated target compartment (`Request.minus`: two Pulse requests, one output). Compartment flows come only from links, so the endpoint compartments' nodes don't affect it.
+    - Selection: config `<circuit>_point_nodes` / `_point_paths`, empty = all. bigraph-schema leaves an unsupplied `[]`-default list out of `config`, so read them with `.get`.
+    - Volume only where the state holds a finite one: non-compliant nodes have none, and `Ambient`'s is infinite (inf - inf would turn the delta store NaN).
+    - Exact and bit-identical to runs without points (probe mode `points`; also with a hemorrhage and the ventilator, `test_point_reads_leave_the_simulation_unchanged`). Generators take `point_reads`.
+    - Airway devices: every combined device circuit drops `EnvironmentToMouth`/`EnvironmentToNasalCavity` (the cannula drops only the nasal one; `SetupCircuitsAndCompartments.cpp:4362`), and a dropped path keeps its last flow. So when a module with `airway_device` is on the process, or the state's `AirwayMode` isn't Free, `respiratory_points` leaves out the circuit's paths that are missing from any circuit holding all its nodes. Naming one raises.
+    - Points are the circuit as loaded; paths Pulse adds at run time (hemorrhage, `CardiovascularModel.cpp:1837`) aren't covered. All 21 shipped states have the same topology.
+    - Construction reads `state_file` when a points module is selected, so the install must exist at `__init__`.
   - **One airway device.** Two connected devices (ventilator plus oxygen) make every advance fail ("Can only change airway mode from the Free mode"). `CircuitModule.airway_device` names each module's 0/1 connect port; `PulseCircuitProcess._check_airway` raises when two are connected, or when one connects in the update another disconnects (Pulse can process the new device first). Probe P9.
   - A request Pulse can't serve returns NaN, so the process fails the load instead of emitting it.
 - `viva_pulse/core.py`: `build_core()` registers the processes explicitly on an `allocate_core()` core, because discovery can miss editable installs. Tests and any `studies/*/sims/run.py` should use it.

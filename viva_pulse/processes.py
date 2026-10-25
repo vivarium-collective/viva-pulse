@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import json
 import math
 from typing import Any, Callable
 
 from process_bigraph import Process, Step
 
 from .circuits import ENGINE_MODEL_TYPES, MODULES
+from .circuits.base import check_outputs
 from .circuits.cardiovascular import HEMORRHAGE_COMPARTMENTS
 from .runtime import ensure_pulse_importable
 
@@ -39,14 +41,41 @@ def _load_engine(install_dir: str, model_type: str, state_file: str, requests: l
     from pulse.cdm.engine import SEDataRequestManager
     from pulse.engine.PulseEngine import PulseEngine, eModelType
 
-    state_path = bin_dir / "states" / state_file
-    if not state_path.is_file():
-        raise FileNotFoundError(f"Pulse state file not found: {state_path}")
-
+    state_path = _state_path(install_dir, state_file)
     engine = PulseEngine(getattr(eModelType, model_type), f"{bin_dir}/")
     engine.log_to_console(False)
     if not engine.serialize_from_file(str(state_path), SEDataRequestManager(requests)):
         raise RuntimeError(f"Pulse failed to load state {state_path}")
+    engine.advance_time_s(0.0)
+    return engine
+
+
+def _state_path(install_dir: str, state_file: str):
+    """``<install>/bin/states/<state_file>``, which must exist."""
+    state_path = ensure_pulse_importable(install_dir) / "states" / state_file
+    if not state_path.is_file():
+        raise FileNotFoundError(f"Pulse state file not found: {state_path}")
+    return state_path
+
+
+def _read_state(install_dir: str, state_file: str) -> dict[str, Any]:
+    """The parsed JSON of a stabilized state file."""
+    return json.loads(_state_path(install_dir, state_file).read_text())
+
+
+def _load_state(install_dir: str, model_type: str, state: dict[str, Any], requests: list):
+    """Like ``_load_engine``, from a state given as parsed JSON (e.g. one with added compartments)."""
+    bin_dir = ensure_pulse_importable(install_dir)
+
+    from pulse.cdm.engine import SEDataRequestManager
+    from pulse.cdm.enums import eSerializationFormat
+    from pulse.engine.PulseEngine import PulseEngine, eModelType
+
+    engine = PulseEngine(getattr(eModelType, model_type), f"{bin_dir}/")
+    engine.log_to_console(False)
+    if not engine.serialize_from_string(json.dumps(state), SEDataRequestManager(requests),
+                                        eSerializationFormat.JSON):
+        raise RuntimeError("Pulse failed to load the edited state")
     engine.advance_time_s(0.0)
     return engine
 
@@ -295,6 +324,10 @@ class PulseCircuitProcess(Process):
     to anything but its default raises, instead of being silently ignored.
     Setpoints, including connecting a ventilator, apply from the first update,
     so row 0 always shows the engine as loaded or settled.
+
+    A module with ``prepare_state`` (the ``*_points`` modules) makes construction
+    read and edit ``state_file``, so such a process needs the Pulse install when it
+    is built, not only at its first update.
     """
 
     config_schema = _circuit_config_schema()
@@ -327,11 +360,22 @@ class PulseCircuitProcess(Process):
             if module.check_config:
                 module.check_config(self.config)
 
+        # Modules whose outputs depend on the state edit a parsed copy of it, which
+        # is then what the engine loads (see CircuitModule.prepare_state).
+        self._state = None
+        outputs = {module.name: module.outputs for module in self._modules}
+        if any(module.prepare_state for module in self._modules):
+            self._state = _read_state(self.config["install_dir"], self.config["state_file"])
+            for module in self._modules:
+                if module.prepare_state:
+                    outputs[module.name] = module.prepare_state(self.config, self._state)
+                    check_outputs(module.name, outputs[module.name])
+
         self._requests = []
         index: dict[tuple, int] = {}
         self._slots: list[tuple[tuple[str, ...], int]] = []
         for module in self._modules:
-            for request in module.outputs:
+            for request in outputs[module.name]:
                 key = request.key()
                 if key not in index:
                     index[key] = len(self._requests)
@@ -369,11 +413,15 @@ class PulseCircuitProcess(Process):
             return self._engine
         ensure_pulse_importable(self.config["install_dir"])
         model_type = self.config["model_type"]
-        requests = [request.to_pulse() for request in self._requests]
+        requests = [pulse for request in self._requests for pulse in request.to_pulse()]
         if model_type in _INITIALIZED_FROM_PATIENT:
             engine = _initialize_engine(self.config["install_dir"], SUPPORTED_MODEL_TYPES[model_type],
                                         self.config["patient_file"], requests)
             self._settle(engine)
+        elif self._state is not None:
+            engine = _load_state(self.config["install_dir"], SUPPORTED_MODEL_TYPES[model_type],
+                                 self._state, requests)
+            self._state = None  # loaded; the parsed state is no longer needed
         else:
             engine = _load_engine(self.config["install_dir"], SUPPORTED_MODEL_TYPES[model_type],
                                   self.config["state_file"], requests)
@@ -409,12 +457,18 @@ class PulseCircuitProcess(Process):
     def _pull(self, engine) -> list[float]:
         """Current readings in request order; NaN (a request Pulse cannot serve)
         raises, because a NaN delta would poison its store for the rest of the run."""
-        values = [float(v) for v in engine.pull_data()[1:]]
+        raw = iter(float(v) for v in engine.pull_data()[1:])
+        values = []
+        for request in self._requests:
+            value = next(raw)
+            if request.minus:
+                value -= next(raw)
+            values.append(value)
         unserved = [r for r, v in zip(self._requests, values) if math.isnan(v)]
         if unserved:
             raise ValueError("Pulse returned NaN for: " + ", ".join(
                 f"{r.category}:{r.compartment + '.' if r.compartment else ''}{r.property}"
-                for r in unserved))
+                + (f"-{r.minus}" if r.minus else "") for r in unserved))
         return values
 
     def _readings(self) -> list[float]:

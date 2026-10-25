@@ -196,6 +196,122 @@ def virtual():
             "pull_data_cost_ms": median_ms(lambda: engine.pull_data(), 51)}
 
 
+POINT_CIRCUITS = {"FullCardiovascular": ("Liquid", "liquid", "mmHg", "mL", "mL/min"),
+                  "Respiratory": ("Gas", "gas", "cmH2O", "mL", "L/min")}
+
+
+def add_points(state):
+    """Every node of the two circuits as a single-node compartment, and every path as a link between
+    a dedicated source and target compartment, so target Inflow - Outflow is that path's signed flow."""
+    cm, comp = state["CircuitManager"], state["CompartmentManager"]
+    circuits = by_name(cm["FluidCircuit"], "Circuit")
+    nodes, paths = fluid(state, "FluidNode"), fluid(state, "FluidPath")
+    existing = {c["FluidCompartment"]["Compartment"]["Name"] for k in ("LiquidCompartment", "GasCompartment")
+                for c in comp[k]}
+    plan = []
+    for circuit, (kind, *_) in POINT_CIRCUITS.items():
+        c = circuits[circuit]["Circuit"]
+
+        def compartment(name, node):
+            assert name not in existing, name
+            existing.add(name)
+            comp[f"{kind}Compartment"].append({"FluidCompartment": {"Compartment": {"Name": name, "Node": [node]}}})
+
+        for n in c["Node"]:
+            compartment(f"VivaPoint{n}", n)
+            plan.append(("node", circuit, n, "Volume" in nodes[n]))
+        for p in c["Path"]:
+            src, tgt = paths[p]["CircuitPath"]["SourceNode"], paths[p]["CircuitPath"]["TargetNode"]
+            compartment(f"VivaPointSrc{p}", src)
+            compartment(f"VivaPointTgt{p}", tgt)
+            comp[f"{kind}Link"].append({"FluidLink": {"Link": {"Name": f"VivaPoint{p}", "Path": p,
+                                                               "SourceCompartment": f"VivaPointSrc{p}",
+                                                               "TargetCompartment": f"VivaPointTgt{p}"}}})
+            plan.append(("path", circuit, p, None))
+    return plan
+
+
+def points():
+    from pulse.cdm import scalars
+    extra = [SEDataRequest.create_physiology_request("OxygenSaturation"),
+             SEDataRequest.create_physiology_request("TidalVolume", unit=VolumeUnit.mL),
+             SEDataRequest.create_physiology_request("RespirationRate", unit=FrequencyUnit.Per_min)]
+    unit = {"mmHg": scalars.PressureUnit.mmHg, "cmH2O": scalars.PressureUnit.cmH2O, "mL": VolumeUnit.mL,
+            "mL/min": VolumePerTimeUnit.mL_Per_min, "L/min": VolumePerTimeUnit.L_Per_min}
+    state = json.loads(STATE.read_text())
+    t = time.perf_counter()
+    plan = add_points(state)
+    edit_s = time.perf_counter() - t
+    requests, reads = [], []
+    for what, circuit, name, has_volume in plan:
+        _, cat, p_u, v_u, f_u = POINT_CIRCUITS[circuit]
+        make = getattr(SEDataRequest, f"create_{cat}_compartment_request")
+        if what == "node":
+            reads.append((what, circuit, name, "Pressure", p_u, len(requests)))
+            requests.append(make(f"VivaPoint{name}", "Pressure", unit[p_u]))
+            if has_volume:
+                reads.append((what, circuit, name, "Volume", v_u, len(requests)))
+                requests.append(make(f"VivaPoint{name}", "Volume", unit[v_u]))
+        else:
+            reads.append((what, circuit, name, "Flow", f_u, len(requests)))
+            requests.append(make(f"VivaPointTgt{name}", "Inflow", unit[f_u]))
+            requests.append(make(f"VivaPointTgt{name}", "Outflow", unit[f_u]))
+    n_vitals = len(VITALS) + len(extra)
+    t = time.perf_counter()
+    engine = PulseEngine(eModelType.HumanAdultWholeBody, f"{BIN}/")
+    engine.log_to_console(False)
+    assert engine.serialize_from_string(json.dumps(state), SEDataRequestManager(vitals_requests() + extra + requests),
+                                        eSerializationFormat.JSON)
+    engine.advance_time_s(0.0)
+    load_s = time.perf_counter() - t
+    worst, checks, now = {}, [], 0.0
+    for t_s in (0.5, 1.37, 30.0):
+        engine.advance_time_s(t_s - now)
+        now = t_s
+        values = engine.pull_data()[1 + n_vitals:]
+        s = engine_state(engine)
+        sn, sp = fluid(s, "FluidNode"), fluid(s, "FluidPath")
+        nan = 0
+        for what, circuit, name, prop, u, i in reads:
+            got = values[i] - values[i + 1] if prop == "Flow" else values[i]
+            if got != got:
+                nan += 1
+                continue
+            item = (sn if what == "node" else sp)[name]
+            if prop not in item:
+                continue
+            raw = next(iter(item[prop].values()))
+            value = float(raw.get("Value", 0.0))  # proto3 JSON writes an infinite double as "Infinity"
+            key = (circuit, what, prop)
+            if value in (float("inf"), float("-inf")):
+                err = 0.0 if got == value else float("inf")
+            else:
+                expected = PyPulse.convert(value, raw["Unit"], u)
+                err = abs(got - expected) / max(1.0, abs(expected))
+            worst[key] = max(worst.get(key, 0.0), err)
+        checks.append({"t": t_s, "nan_reads": nan})
+    plain = PulseEngine(eModelType.HumanAdultWholeBody, f"{BIN}/")
+    plain.log_to_console(False)
+    plain.serialize_from_file(str(STATE), SEDataRequestManager(vitals_requests() + extra))
+    plain.advance_time_s(0.0)
+    plain.advance_time_s(30.0)
+    a, b = engine.pull_data()[1:1 + n_vitals], plain.pull_data()[1:1 + n_vitals]
+    no_volume = add_virtual(json.loads(STATE.read_text()), ["LeftHeart2"])
+    e2 = from_json(no_volume, [SEDataRequest.create_liquid_compartment_request("VLeftHeart2", "Volume", VolumeUnit.mL)])
+    return {"compartments_added": sum(2 if w == "path" else 1 for w, *_ in plan),
+            "reads": {c: {"nodes": sum(1 for w, cc, *_ in plan if cc == c and w == "node"),
+                          "node_volumes": sum(1 for w, cc, _, v in plan if cc == c and w == "node" and v),
+                          "paths": sum(1 for w, cc, *_ in plan if cc == c and w == "path")} for c in POINT_CIRCUITS},
+            "requests": len(requests), "state_edit_s": round(edit_s, 3), "load_s": round(load_s, 3),
+            "max_rel_err": {" ".join(k): v for k, v in sorted(worst.items())}, "checks": checks,
+            "vitals_bit_identical_30s": list(a) == list(b),
+            "vitals_30s": {"with_points": [float(x) for x in a], "unedited": [float(x) for x in b]},
+            "pull_data_ms": median_ms(lambda: engine.pull_data(), 51),
+            "advance_0.02s_ms_with_points": median_ms(lambda: engine.advance_time_s(0.02), 51),
+            "advance_0.02s_ms_unedited": median_ms(lambda: plain.advance_time_s(0.02), 51),
+            "volume_request_on_node_without_volume": float(e2.pull_data()[1])}
+
+
 def edit(path="Aorta1ToBone1", factor=5.0):
     base = json.loads(STATE.read_text())
     out = {"path": path, "factor": factor}
@@ -365,6 +481,6 @@ if __name__ == "__main__":
     elif mode == "remove-child":
         remove_child(sys.argv[2], sys.argv[3])
     else:
-        modes = {"reads": reads, "virtual": virtual, "edit": edit, "modifier": modifier, "add": add,
+        modes = {"reads": reads, "virtual": virtual, "points": points, "edit": edit, "modifier": modifier, "add": add,
                  "remove": remove, "patient": patient, "hemo": hemo}
         print(json.dumps({"probe": mode, **modes[mode]()}, default=float))

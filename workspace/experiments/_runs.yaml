@@ -24,8 +24,8 @@ runs:
 - id: circuit-access-2026-10-24
   model: Pulse HumanAdultWholeBody (direct, not a composite); HumanAdultHemodynamics for hemo
   phase: post-initial-wrapping item 7 scoping (plan-whats-missing-I Phase 1, probes P-a to P-e)
-  parameters: {state_file: StandardMale@0s.json, modes: [reads, virtual, edit, modifier, add, remove, patient, hemo]}
-  command: for m in reads virtual edit modifier add remove patient hemo; do uv run --no-sync python workspace/experiments/circuit-access-2026-10-24/probe_circuit_access.py $m; done
+  parameters: {state_file: StandardMale@0s.json, modes: [reads, virtual, points, edit, modifier, add, remove, patient, hemo]}
+  command: for m in reads virtual points edit modifier add remove patient hemo; do uv run --no-sync python workspace/experiments/circuit-access-2026-10-24/probe_circuit_access.py $m; done
   outputs: [workspace/experiments/circuit-access-2026-10-24/probes.jsonl]
   timestamp: '2026-10-24'
   note: >-

@@ -87,9 +87,13 @@ def test_setpoint_and_config_names_are_unique_across_modules():
 
 
 def test_whole_body_composite_includes_every_whole_body_module():
-    """Falsifies: a module that runs on whole_body is left out of the combined composite."""
-    assert {m.name for m in WHOLE_BODY_MODULES} == {
-        name for name, m in MODULES.items() if "whole_body" in m.model_types}
+    """Falsifies: a module that runs on whole_body is left out of the combined composite (the
+    point modules are opt-in, through point_reads), or point_reads adds anything else."""
+    whole_body = {name for name, m in MODULES.items() if "whole_body" in m.model_types}
+    points = {name for name, m in MODULES.items() if m.prepare_state}
+    assert {m.name for m in WHOLE_BODY_MODULES} == whole_body - points
+    document = pulse_whole_body_circuits(build_core(), point_reads=True)
+    assert set(document["pulse"]["config"]["modules"]) == whole_body
 
 
 def test_airway_devices_are_declared():
