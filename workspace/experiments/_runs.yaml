@@ -21,3 +21,14 @@ runs:
   note: >-
     The same configurations as the canonical cohort runs. It showed that all 21 states load
     and gave the Spearman rho of -0.91 from which the cohort's -0.7 threshold was set.
+- id: circuit-access-2026-10-24
+  model: Pulse HumanAdultWholeBody (direct, not a composite); HumanAdultHemodynamics for hemo
+  phase: post-initial-wrapping item 7 scoping (plan-whats-missing-I Phase 1, probes P-a to P-e)
+  parameters: {state_file: StandardMale@0s.json, modes: [reads, virtual, points, edit, modifier, add, remove, patient, hemo]}
+  command: for m in reads virtual points edit modifier add remove patient hemo; do uv run --no-sync python workspace/experiments/circuit-access-2026-10-24/probe_circuit_access.py $m; done
+  outputs: [workspace/experiments/circuit-access-2026-10-24/probes.jsonl]
+  timestamp: '2026-10-24'
+  note: >-
+    Read and interpreted in docs/plan/plan-circuit-level-access.md. Wall times are from an
+    Apple M3 Max (16 cores); remove and hemo run in a child process because they segfault
+    (exit -11).
