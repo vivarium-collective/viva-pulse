@@ -83,7 +83,8 @@ Markdown("\n".join(sections))
   default `StandardMale@0s.json`). Pulse ships 21. Any other patient runs through
   `patient_file` instead, stabilized once and then cached (see
   [Any patient](processes.md#any-patient)). `circuit_modifiers` re-stabilizes a patient with
-  changed circuit values (see [Circuit modifiers](processes.md#circuit-modifiers)).
+  changed circuit values (see [Circuit modifiers](processes.md#circuit-modifiers)), and
+  `circuit_additions` adds cardiovascular paths (see [Circuit additions](processes.md#circuit-additions)).
 - **Ventilation-mechanics runs** start from a patient file (`<install>/bin/patients/*.json`)
   and settle before t = 0, which takes about one breath.
 - **Setpoints apply from the first update.** Row 0 always shows the engine as loaded or

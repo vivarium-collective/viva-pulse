@@ -156,7 +156,7 @@ The choice between them is the user's: "what if this patient had it" or "what ha
 1. Point reads (1): native, free, and covered by existing contracts. Done (PR #8).
 2. Instant patients (5): small and independent. It is also the base for the modifier route (2). Done (PR #9).
 3. Value changes (2), after the user picks the meaning. The user picked the modifier route (a re-stabilized patient); done as `circuit_modifiers`, through the `PyPulse.Engine` binding's `set_configuration_override` instead of the private handle the probe used.
-4. Path additions (3): the link and transport probe is done (2026-10-25). Transport follows a path only with a link, so an addition must include one. Removals stay refused.
+4. Path additions (3): the link and transport probe is done (2026-10-25). Transport follows a path only with a link, so an addition must include one. Implemented as `circuit_additions` (cardiovascular resistance paths only, as probed). Removals stay refused.
 
 Separate cardiovascular (4) waits on Kitware.
 

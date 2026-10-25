@@ -229,6 +229,15 @@ def test_every_generator_passes_circuit_modifiers(generator):
     assert doc["pulse"]["config"]["circuit_modifiers"] == {"Aorta1ToBone1": 2.0}
 
 
+@pytest.mark.parametrize("generator", GENERATORS, ids=lambda g: g.__name__)
+def test_every_generator_passes_circuit_additions(generator):
+    """Falsifies: a generator drops circuit_additions, so its runs lack the added paths."""
+    additions = {"Shunt": {"source": "Aorta1", "target": "VenaCava1", "resistance_mmHg_s_per_mL": 0.5}}
+    assert "circuit_additions" in inspect.signature(generator).parameters
+    doc = generator(build_core(), circuit_additions=additions)
+    assert doc["pulse"]["config"]["circuit_additions"] == additions
+
+
 def test_composite_runs_the_patient_from_the_cache(cache, patient, first_load, run_composite):
     """Falsifies: patient_file stops at the generator, or the composite does not load the
     cached state (a new stabilization would replace the cache file)."""

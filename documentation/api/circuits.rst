@@ -20,3 +20,6 @@ setpoints drive (inputs).
 .. automodule:: viva_pulse.circuits.supplemental_oxygen
 
 .. automodule:: viva_pulse.circuits.points
+
+.. automodule:: viva_pulse.circuits.additions
+   :members: add_paths, check_additions, CIRCUIT, FIELDS
