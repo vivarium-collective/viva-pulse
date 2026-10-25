@@ -140,6 +140,13 @@ controls:
     starting values.
   observed: 0 mL lost; MAP 95.3 -> 95.3 mmHg; heart rate 72.0 -> 71.2 /min.
   result: PASS
+- name: severity-1.0
+  kind: positive
+  hypothesis: A maximal bleed produces the largest, unambiguous loss and the deepest
+    pressure fall, confirming the readout responds when the effect is certainly present.
+  expected: The largest hemorrhaged volume of the sweep and the lowest MAP.
+  observed: 1793 mL lost (most of any arm); MAP 95.3 -> 78.1 mmHg (largest fall).
+  result: PASS
 preregistered:
   registered_at: '2026-10-23'
   criteria:
@@ -171,6 +178,39 @@ limitations:
 - One patient (StandardMale), one site (RightLeg) and 10 minutes; longer bleeds and
   other sites are not covered.
 - Severity is Pulse's own dimensionless scale, not a calibrated flow rate.
+- Acceptance bands trace to the deterministic pilot and the .build-progress.md
+  reference run, not to external physiology literature (none was provided), so
+  they are regression checks on Pulse's behaviour, not a validation against data.
+alternative_hypotheses:
+- hypothesis: MAP is held at low severity only because less blood is lost, not by
+    active compensation.
+  status: excluded
+  evidence: Blood loss rises monotonically with severity (F-01) while MAP is still
+    held flat through severity 0.4; the pressure is maintained despite increasing
+    loss, so reduced loss cannot be the explanation.
+- hypothesis: The heart-rate rise is incidental and does not defend pressure.
+  status: excluded
+  evidence: MAP stays within 1.1 mmHg of start exactly over the range where heart
+    rate climbs and cardiac output is still near baseline, and breaks only once
+    cardiac output falls (F-02, F-04); the tachycardia tracks the pressure defence.
+- hypothesis: The last-step deferral or the fixed 1 s record step distorts the
+    severity-0.8 numbers.
+  status: excluded
+  evidence: Severity 0.8 reproduces the independent reference run to 4 significant
+    figures (F-03), so the recording cadence does not move the result.
+discovery_implications:
+  resolved: Over 10 minutes and one site, MAP is defended by baroreflex tachycardia
+    until roughly severity 0.5, then falls as cardiac output drops.
+  remaining: Whether the same threshold holds at other bleed sites, over longer
+    windows where compensation may fatigue, and how Pulse severity maps to a
+    calibrated flow rate.
+  followup_study_proposals:
+  - title: multi-site-severity
+    motivation: Repeat the sweep at a second compartment (e.g. an arm or the aorta)
+      to test whether the severity-0.5 compensation threshold is site-specific.
+  - title: long-window-decompensation
+    motivation: Extend the severe arms past 10 minutes to see whether the held
+      pressure at mild severities eventually decompensates.
 runs:
 - name: viva_pulse.composites.hemorrhage.pulse_hemorrhage__1792749102__7f862d
   status: completed
@@ -430,6 +470,19 @@ findings:
   evidence:
     study_tests:
     - tests/test_severity.py::test_reproduces_reference_run
+    runs: 'canonical runs: investigation run of 2026-10-23 at commit 5754940 (runs.db)'
+- id: F-04
+  tier: mechanism
+  mechanism_origin: emergent
+  statement: Pressure is defended by baroreflex tachycardia, not by reduced loss.
+    Heart rate rises monotonically with severity (71 -> 110 /min) while cardiac
+    output still falls (5.75 -> 3.95 L/min); MAP is held only while the tachycardia
+    offsets the volume loss and breaks once the bleed outruns it (severity >= 0.6).
+    The compensation is Pulse's own cardiovascular reflex, not an imposed term.
+  evidence:
+    study_tests:
+    - tests/test_severity.py::test_heart_rate_rises_with_severity
+    - tests/test_severity.py::test_pressure_falls_for_severe_bleeds
     runs: 'canonical runs: investigation run of 2026-10-23 at commit 5754940 (runs.db)'
 conclusion: '## Claims
 

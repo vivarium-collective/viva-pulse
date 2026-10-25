@@ -158,6 +158,15 @@ controls:
   expected: Final blood volume 3936 mL and MAP 84.1 mmHg, the reference run in .build-progress.md.
   observed: Blood volume 3936 mL, MAP 84.1 mmHg at 10 min; no infusion.
   result: PASS
+- name: saline-map-90
+  kind: positive
+  hypothesis: A closed loop that does engage should measurably raise blood volume and
+    MAP above the untreated reference, confirming the treatment readout responds.
+  expected: Final blood volume and MAP above the untreated arm, with a non-zero
+    commanded infusion.
+  observed: 79.6 mL infused from t=508 s; blood volume 4014 mL (+78) and MAP 86.33
+    mmHg (+2.2) vs untreated.
+  result: PASS
 robustness:
   n_replicates: 1
   parameter_sweep: false
@@ -381,6 +390,34 @@ findings:
     study_tests:
     - tests/test_resuscitation.py::test_controller_engages_in_treated_arms
     runs: 'canonical runs: investigation run of 2026-10-23 at commit 5754940 (runs.db)'
+- id: F-03
+  tier: mechanism
+  mechanism_origin: engineered
+  statement: The improvement is produced by the engineered MapFluidController, not by
+    the fluid itself. The loop watches MAP and commands infusion only once it falls
+    below the 90 mmHg target, so the intervention is late (t=508 s) and small (79.6
+    mL); the restored volume, not the compound, drives the +78 mL / +2.2 mmHg gain.
+    This is an engineered control term added to the composite, distinct from Pulse's
+    own reflexes.
+  evidence:
+    study_tests:
+    - tests/test_resuscitation.py::test_controller_engages_in_treated_arms
+    - tests/test_resuscitation.py::test_treated_arms_preserve_blood_volume
+    runs: 'canonical runs: investigation run of 2026-10-23 at commit 5754940 (runs.db)'
+alternative_hypotheses:
+- hypothesis: The arms look alike only because the controller never actually infuses.
+  status: excluded
+  evidence: F-02/F-03 — the controller engaged at t=508 s and delivered 79.6 mL in each
+    treated arm; the treated arms beat untreated by +78 mL and +2.2 mmHg.
+- hypothesis: The treated-vs-untreated gap is within run-to-run variation.
+  status: excluded
+  evidence: Pulse is deterministic (single replicate justified); the untreated arm
+    reproduces the reference run exactly, so the +78 mL / +2.2 mmHg gap is not noise.
+- hypothesis: Whole blood should outperform saline within this 10-minute window.
+  status: untested
+  evidence: The two compounds differ by 0.002 mL and 0.0006 mmHg at 10 min — below any
+    resolution — because only 79.6 mL was infused. The window is too short to separate
+    them; this is the compound-comparison follow-up, not a null result.
 conclusion: '## Claims
 
   The hypothesis holds (7/7 tests passed): treatment preserves blood volume and MAP.
