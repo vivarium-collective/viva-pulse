@@ -154,6 +154,22 @@ doc = pulse_cardiovascular(core, circuit_additions={
 - The joined compartments' regional flows include the added path (here `central/aorta/outflow_mL_per_min` and `central/vena_cava/inflow_mL_per_min`). Its resistance is fixed: the resistance multipliers and vascular tone don't scale it. A hemorrhage on a compartment the path feeds is larger, because Pulse sizes a bleed from the compartment's inflow.
 - Whole-body only. It combines with `patient_file` and `circuit_modifiers`: the path is added to the state they produce. The process reads (and, if needed, stabilizes) that state when it is built, not on its first update.
 
+### Saving states during a run
+
+`viva_pulse.states.save_states(engine, out_dir, times_s)` advances a loaded Pulse engine to each simulation time and saves its state there as `<name>@<t>s.json`, Pulse's own naming for its shipped states. A saved state is an ordinary state file, so `state_file` loads it as the start of another run: run to `t`, save, then branch that exact state under several interventions.
+
+```bash
+python -m viva_pulse.states StandardMale@0s.json --times 60 120 --out states/
+```
+
+- The state holds everything the engine held, including paths and actions added during the run: a hemorrhage's bleed path and link are in it, and the bleed continues after reload.
+- A reloaded state continues the run closely, but not bit-identically. Saved during a hemorrhage at 10 s and advanced 20 s, every vital agrees with the uninterrupted run to 2e-8 relative.
+- Each state is saved at the first Pulse step (0.02 s) at or after its time. The file name uses the engine's time rounded to the microsecond; the state records the exact `SimulationTime`.
+- On the command line, a bare name is a state in `<install>/bin/states/`; anything with a path separator is a path.
+- Whole-body engines only (Pulse doesn't serialize ventilation-mechanics); others raise before anything is advanced. An existing file is never overwritten, and two times within one step raise.
+- `save_states` drives the engine it is given, so it is for an engine you hold (Pulse's API, the command line). The engine inside a running composite's process is advanced by the composite; saving from a composite mid-run is not supported.
+- A state saved from a process with point reads or `circuit_additions` contains their added compartments, paths and links, so loading it with the same options again raises a name collision.
+
 ## Pulse circuits
 
 Pulse models physiology as lumped-parameter circuits. `pulse_cardiovascular` exposes the cardiovascular circuit below. Its `central`, `renal` and `peripheral` sub-stores follow the diagram's branches.
