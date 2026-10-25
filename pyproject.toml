@@ -51,7 +51,7 @@ docs = [
 # The workbench runs studies in this project's own venv (it is the only one
 # that can import PyPulse), so it is pinned to the main commit installed there.
 [tool.uv.sources]
-vivarium-workbench = { git = "https://github.com/vivarium-collective/vivarium-workbench.git", rev = "7c1132a70b128c8dc52d07ea71a16fb32cae838e" }
+vivarium-workbench = { git = "https://github.com/vivarium-collective/vivarium-workbench.git", rev = "d484974c" }
 
 [tool.hatch.build.targets.wheel]
 packages = ["viva_pulse"]
