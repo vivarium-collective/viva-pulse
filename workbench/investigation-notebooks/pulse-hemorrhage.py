@@ -263,12 +263,12 @@ def _render_one(address, config, runs_db, study_yaml, overrides=None):
 #
 # | simulation | composite | steps | params |
 # | --- | --- | --- | --- |
-# | `severity-0.0` | `viva_pulse.composites.hemorrhage.pulse_hemorrhage` | 600 | state_file=StandardMale@0s.json, compartment=RightLeg, severity=0.0 |
-# | `severity-0.2` | `viva_pulse.composites.hemorrhage.pulse_hemorrhage` | 600 | state_file=StandardMale@0s.json, compartment=RightLeg, severity=0.2 |
-# | `severity-0.4` | `viva_pulse.composites.hemorrhage.pulse_hemorrhage` | 600 | state_file=StandardMale@0s.json, compartment=RightLeg, severity=0.4 |
-# | `severity-0.6` | `viva_pulse.composites.hemorrhage.pulse_hemorrhage` | 600 | state_file=StandardMale@0s.json, compartment=RightLeg, severity=0.6 |
+# | `severity-0.0` | `viva_pulse.composites.hemorrhage.pulse_hemorrhage` | 600 | severity=0.0 |
+# | `severity-0.2` | `viva_pulse.composites.hemorrhage.pulse_hemorrhage` | 600 | severity=0.2 |
+# | `severity-0.4` | `viva_pulse.composites.hemorrhage.pulse_hemorrhage` | 600 | severity=0.4 |
+# | `severity-0.6` | `viva_pulse.composites.hemorrhage.pulse_hemorrhage` | 600 | severity=0.6 |
 # | `severity-0.8` | `viva_pulse.composites.hemorrhage.pulse_hemorrhage` | 600 | state_file=StandardMale@0s.json, compartment=RightLeg, severity=0.8 |
-# | `severity-1.0` | `viva_pulse.composites.hemorrhage.pulse_hemorrhage` | 600 | state_file=StandardMale@0s.json, compartment=RightLeg, severity=1.0 |
+# | `severity-1.0` | `viva_pulse.composites.hemorrhage.pulse_hemorrhage` | 600 | severity=1.0 |
 
 # ### The model & its parameters
 #
@@ -284,6 +284,7 @@ ov_viva_pulse_composites_hemorrhage_pulse_hemorrhage = {
     'state_file'       : 'StandardMale@0s.json',   # Stabilized Pulse patient state in <install>/bin/states
     'patient_file'     : 'StandardMale.json',   # Any patient instead of state_file: a name in <install>/bin/patients or a path; stabilized once (about 13 s), then cached
     'circuit_modifiers': {},   # Circuit path or node name -> multiplier on the value Pulse initializes it with; the patient is stabilized with them (about 25 s the first time, then cached)
+    'circuit_additions': {},   # New path name -> {source, target, resistance_mmHg_s_per_mL}: a cardiovascular path added with its compartment link, as a perturbation of the loaded patient
     'compartment'      : 'RightLeg',   # Hemorrhage site (Pulse eHemorrhage_Compartment)
     'severity'         : 0.8,   # Hemorrhage severity in [0, 1]
 }
@@ -427,6 +428,7 @@ ov_viva_pulse_composites_hemorrhage_pulse_resuscitation = {
     'state_file'         : 'StandardMale@0s.json',   # Stabilized Pulse patient state in <install>/bin/states
     'patient_file'       : 'StandardMale.json',   # Any patient instead of state_file: a name in <install>/bin/patients or a path; stabilized once (about 13 s), then cached
     'circuit_modifiers'  : {},   # Circuit path or node name -> multiplier on the value Pulse initializes it with; the patient is stabilized with them (about 25 s the first time, then cached)
+    'circuit_additions'  : {},   # New path name -> {source, target, resistance_mmHg_s_per_mL}: a cardiovascular path added with its compartment link, as a perturbation of the loaded patient
     'compartment'        : 'RightLeg',   # Hemorrhage site (Pulse eHemorrhage_Compartment)
     'severity'           : 0.8,   # Hemorrhage severity in [0, 1]
     'compound'           : 'Saline',   # Infused compound (Pulse compound name, e.g. Saline, Blood)
@@ -445,6 +447,7 @@ ov_viva_pulse_composites_hemorrhage_pulse_hemorrhage = {
     'state_file'       : 'StandardMale@0s.json',   # Stabilized Pulse patient state in <install>/bin/states
     'patient_file'     : 'StandardMale.json',   # Any patient instead of state_file: a name in <install>/bin/patients or a path; stabilized once (about 13 s), then cached
     'circuit_modifiers': {},   # Circuit path or node name -> multiplier on the value Pulse initializes it with; the patient is stabilized with them (about 25 s the first time, then cached)
+    'circuit_additions': {},   # New path name -> {source, target, resistance_mmHg_s_per_mL}: a cardiovascular path added with its compartment link, as a perturbation of the loaded patient
     'compartment'      : 'RightLeg',   # Hemorrhage site (Pulse eHemorrhage_Compartment)
     'severity'         : 0.8,   # Hemorrhage severity in [0, 1]
 }
@@ -520,33 +523,33 @@ _save_viz('fluid-resuscitation', 'resuscitation-response', _render_one('local:Fl
 #
 # **Hypothesis.** Every patient loses blood volume, raises heart rate and loses arterial pressure. Absolute blood loss varies much less than starting blood volume does, so patients with a smaller starting blood volume lose a larger fraction of it.
 #
-# **Claim.** All 21 shipped patients bleed and compensate the same way, and the fraction of blood lost falls with starting blood volume (Spearman rho = -0.91).
+# **Claim.** All 21 shipped patients bleed and compensate the same way, and the fraction of blood lost falls with starting blood volume (Spearman rho = -0.89).
 
 # ### Parameters
 #
 # | simulation | composite | steps | params |
 # | --- | --- | --- | --- |
-# | `Bradycardic` | `viva_pulse.composites.hemorrhage.pulse_hemorrhage` | 600 | state_file=Bradycardic@0s.json, compartment=RightLeg, severity=0.8 |
-# | `Carol` | `viva_pulse.composites.hemorrhage.pulse_hemorrhage` | 600 | state_file=Carol@0s.json, compartment=RightLeg, severity=0.8 |
-# | `Cynthia` | `viva_pulse.composites.hemorrhage.pulse_hemorrhage` | 600 | state_file=Cynthia@0s.json, compartment=RightLeg, severity=0.8 |
-# | `DefaultFemale` | `viva_pulse.composites.hemorrhage.pulse_hemorrhage` | 600 | state_file=DefaultFemale@0s.json, compartment=RightLeg, severity=0.8 |
-# | `DefaultMale` | `viva_pulse.composites.hemorrhage.pulse_hemorrhage` | 600 | state_file=DefaultMale@0s.json, compartment=RightLeg, severity=0.8 |
-# | `ExtremeFemale` | `viva_pulse.composites.hemorrhage.pulse_hemorrhage` | 600 | state_file=ExtremeFemale@0s.json, compartment=RightLeg, severity=0.8 |
-# | `ExtremeMale` | `viva_pulse.composites.hemorrhage.pulse_hemorrhage` | 600 | state_file=ExtremeMale@0s.json, compartment=RightLeg, severity=0.8 |
-# | `Gus` | `viva_pulse.composites.hemorrhage.pulse_hemorrhage` | 600 | state_file=Gus@0s.json, compartment=RightLeg, severity=0.8 |
-# | `Hassan` | `viva_pulse.composites.hemorrhage.pulse_hemorrhage` | 600 | state_file=Hassan@0s.json, compartment=RightLeg, severity=0.8 |
-# | `Jane` | `viva_pulse.composites.hemorrhage.pulse_hemorrhage` | 600 | state_file=Jane@0s.json, compartment=RightLeg, severity=0.8 |
-# | `Jeff` | `viva_pulse.composites.hemorrhage.pulse_hemorrhage` | 600 | state_file=Jeff@0s.json, compartment=RightLeg, severity=0.8 |
-# | `Joel` | `viva_pulse.composites.hemorrhage.pulse_hemorrhage` | 600 | state_file=Joel@0s.json, compartment=RightLeg, severity=0.8 |
-# | `Nathan` | `viva_pulse.composites.hemorrhage.pulse_hemorrhage` | 600 | state_file=Nathan@0s.json, compartment=RightLeg, severity=0.8 |
-# | `Overweight` | `viva_pulse.composites.hemorrhage.pulse_hemorrhage` | 600 | state_file=Overweight@0s.json, compartment=RightLeg, severity=0.8 |
-# | `Rick` | `viva_pulse.composites.hemorrhage.pulse_hemorrhage` | 600 | state_file=Rick@0s.json, compartment=RightLeg, severity=0.8 |
-# | `Soldier` | `viva_pulse.composites.hemorrhage.pulse_hemorrhage` | 600 | state_file=Soldier@0s.json, compartment=RightLeg, severity=0.8 |
-# | `StandardFemale` | `viva_pulse.composites.hemorrhage.pulse_hemorrhage` | 600 | state_file=StandardFemale@0s.json, compartment=RightLeg, severity=0.8 |
+# | `Bradycardic` | `viva_pulse.composites.hemorrhage.pulse_hemorrhage` | 600 | state_file=Bradycardic@0s.json |
+# | `Carol` | `viva_pulse.composites.hemorrhage.pulse_hemorrhage` | 600 | state_file=Carol@0s.json |
+# | `Cynthia` | `viva_pulse.composites.hemorrhage.pulse_hemorrhage` | 600 | state_file=Cynthia@0s.json |
+# | `DefaultFemale` | `viva_pulse.composites.hemorrhage.pulse_hemorrhage` | 600 | state_file=DefaultFemale@0s.json |
+# | `DefaultMale` | `viva_pulse.composites.hemorrhage.pulse_hemorrhage` | 600 | state_file=DefaultMale@0s.json |
+# | `ExtremeFemale` | `viva_pulse.composites.hemorrhage.pulse_hemorrhage` | 600 | state_file=ExtremeFemale@0s.json |
+# | `ExtremeMale` | `viva_pulse.composites.hemorrhage.pulse_hemorrhage` | 600 | state_file=ExtremeMale@0s.json |
+# | `Gus` | `viva_pulse.composites.hemorrhage.pulse_hemorrhage` | 600 | state_file=Gus@0s.json |
+# | `Hassan` | `viva_pulse.composites.hemorrhage.pulse_hemorrhage` | 600 | state_file=Hassan@0s.json |
+# | `Jane` | `viva_pulse.composites.hemorrhage.pulse_hemorrhage` | 600 | state_file=Jane@0s.json |
+# | `Jeff` | `viva_pulse.composites.hemorrhage.pulse_hemorrhage` | 600 | state_file=Jeff@0s.json |
+# | `Joel` | `viva_pulse.composites.hemorrhage.pulse_hemorrhage` | 600 | state_file=Joel@0s.json |
+# | `Nathan` | `viva_pulse.composites.hemorrhage.pulse_hemorrhage` | 600 | state_file=Nathan@0s.json |
+# | `Overweight` | `viva_pulse.composites.hemorrhage.pulse_hemorrhage` | 600 | state_file=Overweight@0s.json |
+# | `Rick` | `viva_pulse.composites.hemorrhage.pulse_hemorrhage` | 600 | state_file=Rick@0s.json |
+# | `Soldier` | `viva_pulse.composites.hemorrhage.pulse_hemorrhage` | 600 | state_file=Soldier@0s.json |
+# | `StandardFemale` | `viva_pulse.composites.hemorrhage.pulse_hemorrhage` | 600 | state_file=StandardFemale@0s.json |
 # | `StandardMale` | `viva_pulse.composites.hemorrhage.pulse_hemorrhage` | 600 | state_file=StandardMale@0s.json, compartment=RightLeg, severity=0.8 |
-# | `Tachycardic` | `viva_pulse.composites.hemorrhage.pulse_hemorrhage` | 600 | state_file=Tachycardic@0s.json, compartment=RightLeg, severity=0.8 |
-# | `Underweight` | `viva_pulse.composites.hemorrhage.pulse_hemorrhage` | 600 | state_file=Underweight@0s.json, compartment=RightLeg, severity=0.8 |
-# | `Ventilated` | `viva_pulse.composites.hemorrhage.pulse_hemorrhage` | 600 | state_file=Ventilated@0s.json, compartment=RightLeg, severity=0.8 |
+# | `Tachycardic` | `viva_pulse.composites.hemorrhage.pulse_hemorrhage` | 600 | state_file=Tachycardic@0s.json |
+# | `Underweight` | `viva_pulse.composites.hemorrhage.pulse_hemorrhage` | 600 | state_file=Underweight@0s.json |
+# | `Ventilated` | `viva_pulse.composites.hemorrhage.pulse_hemorrhage` | 600 | state_file=Ventilated@0s.json |
 
 # ### The model & its parameters
 #
@@ -562,6 +565,7 @@ ov_viva_pulse_composites_hemorrhage_pulse_hemorrhage = {
     'state_file'       : 'StandardMale@0s.json',   # Stabilized Pulse patient state in <install>/bin/states
     'patient_file'     : 'StandardMale.json',   # Any patient instead of state_file: a name in <install>/bin/patients or a path; stabilized once (about 13 s), then cached
     'circuit_modifiers': {},   # Circuit path or node name -> multiplier on the value Pulse initializes it with; the patient is stabilized with them (about 25 s the first time, then cached)
+    'circuit_additions': {},   # New path name -> {source, target, resistance_mmHg_s_per_mL}: a cardiovascular path added with its compartment link, as a perturbation of the loaded patient
     'compartment'      : 'RightLeg',   # Hemorrhage site (Pulse eHemorrhage_Compartment)
     'severity'         : 0.8,   # Hemorrhage severity in [0, 1]
 }
