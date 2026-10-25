@@ -129,6 +129,29 @@ doc = pulse_cardiovascular(core, circuit_additions={
 - Whole-body only. It combines with `patient_file` and `circuit_modifiers`. The process reads
   that state when it is built.
 
+## Saving states during a run
+
+{func}`viva_pulse.states.save_states` advances a loaded Pulse engine to each simulation time and
+saves its state there as `<name>@<t>s.json`. A saved state is an ordinary state file, so
+`state_file` loads it as the start of another run: run to `t`, save, then branch that exact
+state under several interventions. From the command line:
+
+```bash
+python -m viva_pulse.states StandardMale@0s.json --times 60 120 --out states/
+```
+
+- The state holds everything the engine held, including a hemorrhage's run-time bleed path,
+  and the bleed continues after reload.
+- A reloaded state continues the run to about 2e-8 relative (saved at 10 s, advanced 20 s),
+  not bit-identically.
+- Each state is saved at the first Pulse step (0.02 s) at or after its time; two times within
+  one step raise, and an existing file is never overwritten.
+- Whole-body engines only (Pulse doesn't serialize ventilation-mechanics). `save_states` drives
+  the engine it is given, so it is for an engine you hold; saving from a running composite is
+  not supported.
+- A state saved with point reads or `circuit_additions` contains their added names, so loading
+  it with the same options again raises a name collision.
+
 ## `MapFluidController`: a closed-loop Step
 
 A proportional controller. It sets the IV infusion rate to
