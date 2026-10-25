@@ -32,3 +32,13 @@ runs:
     Read and interpreted in docs/plan/plan-circuit-level-access.md. Wall times are from an
     Apple M3 Max (16 cores); remove and hemo run in a child process because they segfault
     (exit -11).
+- id: path-additions-2026-10-25
+  model: Pulse HumanAdultWholeBody (direct, not a composite)
+  phase: circuit-level access candidate 4 (path additions), the link and transport probe
+  parameters: {state_file: StandardMale@0s.json, path: Aorta1 -> VenaCava1, resistance_mmHg_s_per_mL: 0.5, arms: [unedited, path_only, path_link, path_link_cv], samples_s: [0, 10, 30, 60]}
+  command: PYTHONPATH=$PWD uv run --no-sync python workspace/experiments/path-additions-2026-10-25/probe_path_additions.py
+  outputs: [workspace/experiments/path-additions-2026-10-25/probes.jsonl]
+  timestamp: '2026-10-25'
+  note: >-
+    Read and interpreted in docs/plan/plan-circuit-level-access.md section 3. Deterministic;
+    path_link and path_link_cv agree in every sampled value.

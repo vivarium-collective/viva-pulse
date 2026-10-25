@@ -113,7 +113,22 @@ The choice between them is the user's: "what if this patient had it" or "what ha
 
 ### 3. Change wiring: additions partly, removals never
 
-- **Additions** are solved, but the compartment graph doesn't see them. A complete addition would also need a `LiquidLink` and a `LiquidGraph` entry. Whether substance transport then follows has not been probed. Recommendation: allow additions only together with a link, after a transport probe.
+- **Additions** are solved, but the compartment graph doesn't see them. A complete addition also needs a `LiquidLink` and a `LiquidGraph` entry.
+- **Transport follows the link** (probe `path-additions-2026-10-25`, 2026-10-25: the same Aorta1 -> VenaCava1 shunt, R 0.5, three arms plus a control, 60 s; `workspace/experiments/path-additions-2026-10-25/`). Pulse moves substances over the `ActiveCardiovascular` liquid graph (`CardiovascularModel.cpp:1186`).
+
+  | at 60 s | unedited | path only | path + link |
+  |---|---|---|---|
+  | Sodium, Aorta / VenaCava (g/L) | 3.284 / 3.285 | **4.85 / 1.18** | 3.2808 / 3.2810 |
+  | O2 partial pressure, Aorta / VenaCava (mmHg) | 91.3 / 39.0 | **334 / 41.3** | 96.7 / 50.7 |
+  | MAP / HR / CO | 95.3 / 72.0 / 5778 | 74.8 / 176.9 / 11607 | 72.9 / 134.8 / 10510 |
+
+  - **Path only:** blood volume moves along the path but substance mass doesn't. Sodium, nearly uniform in plasma, concentrates in Aorta and dilutes in VenaCava, and arterial PO2 reaches a nonphysical 334 mmHg. The responses built on those concentrations are artifacts: HR 177 vs 135 with the link. The mode `add` result above (HR 168 at 30 s) was partly this artifact.
+  - **Path + link:** sodium stays uniform. VenaCava PO2 rises 39 -> 51 mmHg as arterial blood reaches the vein, the physiological signature of an arteriovenous shunt. The link carries 150 mL/s at 60 s and persists through serialization.
+  - **Graph placement:** the link went into every liquid graph holding both compartments (`ActiveCardiovascular`, `Cardiovascular`, `Renal`). A control arm with only the two graphs Pulse uses for its own `AortaToBone` link gave identical values at every sample.
+- **Recommendation:** an addition is a path in every circuit holding both its nodes, plus a link between the nodes' compartments, in the graphs Pulse uses for that circuit's own links. A path-only addition must be refused, because it silently corrupts substance concentrations.
+  - Each node's compartment is read from the state's `LiquidCompartment` `Node` lists. In StandardMale no node is in two liquid compartments. 6 of the 124 `FullCardiovascular` nodes are in none (e.g. `RightAortaConnection`, `LeftIntermediatePulmonaryVeins1`); a path there gets no link, so it must be refused.
+  - A path within one compartment (both nodes in it) presumably needs no link, since a link joins two compartments. Not probed.
+  - Not yet probed: compliance paths; respiratory (gas) additions.
 - **Removals** must be refused before loading. A removal crashes even when the link and graph entries are removed too. The models hold paths by name across many sources (7 physiology models call `GetPath`, besides the equipment models). So the only safe rule is to never remove a path that ships with Pulse.
 
 ### 4. Truly separate circuits: blocked outside this repo
@@ -141,7 +156,7 @@ The choice between them is the user's: "what if this patient had it" or "what ha
 1. Point reads (1): native, free, and covered by existing contracts. Done (PR #8).
 2. Instant patients (5): small and independent. It is also the base for the modifier route (2). Done (PR #9).
 3. Value changes (2), after the user picks the meaning. The user picked the modifier route (a re-stabilized patient); done as `circuit_modifiers`, through the `PyPulse.Engine` binding's `set_configuration_override` instead of the private handle the probe used.
-4. Path additions (3), only after the link and transport probe. Removals stay refused.
+4. Path additions (3): the link and transport probe is done (2026-10-25). Transport follows a path only with a link, so an addition must include one. Removals stay refused.
 
 Separate cardiovascular (4) waits on Kitware.
 
