@@ -75,6 +75,30 @@ with `model_type: whole_body`, and on every composite that takes `state_file`. L
   default as unset, so `patient_file="StandardMale.json"` uses `state_file`; StandardMale
   ships a state anyway.
 
+## Circuit modifiers
+
+`circuit_modifiers` changes a circuit value before the patient is stabilized. It is Pulse's own
+configuration `Modifiers`, accepted on the whole-body engine wherever `patient_file` is. It maps a path or node
+name to a multiplier on the resistance or compliance of that path, or the volume of that node,
+as Pulse initializes it:
+
+```python
+doc = pulse_cardiovascular(core, circuit_modifiers={"Aorta1ToBone1": 5.0})
+```
+
+- The result is a different patient, not a perturbation. Stabilization re-tunes the rest of
+  the circulation to hold the patient's baselines. `Aorta1ToBone1` ×5 ends at ×4.35 after
+  re-tuning, with cardiac output about 10% higher and MAP unchanged. To change values during a
+  run, use the multiplier setpoints instead.
+- Pulse ships modifiers of its own (24 by default). A multiplier scales Pulse's value for that
+  name (1 where it has none), and Pulse's other modifiers are kept.
+- Names are paths or nodes of the respiratory circuit or the active cardiovascular circuit
+  (`FullCardiovascular`). Pulse rejects anything else, and the load fails naming the modifiers. Multipliers must be finite and greater than 0.
+- The modified patient is stabilized once and cached like any patient, with the modifiers in
+  the cache key. The first run takes about 25 s: the unmodified patient is stabilized first,
+  for Pulse's own modifiers. It starts from `patient_file` (default StandardMale), so a non-default
+  `state_file` together with modifiers raises an error. Whole-body only.
+
 ## `MapFluidController`: a closed-loop Step
 
 A proportional controller. It sets the IV infusion rate to
