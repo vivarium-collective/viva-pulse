@@ -29,12 +29,13 @@ name: Publish read-only workbench
 # DEPLOY job (post-merge to main), NOT a PR gate — a failure here never blocks a
 # merge. It writes workbench/ (+ a dashboard/ redirect) on gh-pages.
 
-# viva-pulse: manual trigger only (2026-10-23) until GitHub Pages is set up for
-# this private repo. The template triggers on pushes to main; restore that
-# `push:` block once Pages is configured. This is a hand edit, which the
-# provenance guard does not detect; re-scaffolding this workflow restores the
-# push trigger.
 on:
+  push:
+    branches: [main]
+    paths:
+      - 'workspace/**'
+      - 'scripts/publish_dashboard.sh'
+      - '.github/workflows/publish-dashboard.yml'
   workflow_dispatch:
 
 concurrency:
