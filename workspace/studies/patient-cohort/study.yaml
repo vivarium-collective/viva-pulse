@@ -38,83 +38,83 @@ baseline:
     n_steps: 600
 variants:
 - name: Bradycardic
-  base_composite: StandardMale
+  composite: viva_pulse.composites.hemorrhage.pulse_hemorrhage
   parameter_overrides:
     state_file: Bradycardic@0s.json
 - name: Carol
-  base_composite: StandardMale
+  composite: viva_pulse.composites.hemorrhage.pulse_hemorrhage
   parameter_overrides:
     state_file: Carol@0s.json
 - name: Cynthia
-  base_composite: StandardMale
+  composite: viva_pulse.composites.hemorrhage.pulse_hemorrhage
   parameter_overrides:
     state_file: Cynthia@0s.json
 - name: DefaultFemale
-  base_composite: StandardMale
+  composite: viva_pulse.composites.hemorrhage.pulse_hemorrhage
   parameter_overrides:
     state_file: DefaultFemale@0s.json
 - name: DefaultMale
-  base_composite: StandardMale
+  composite: viva_pulse.composites.hemorrhage.pulse_hemorrhage
   parameter_overrides:
     state_file: DefaultMale@0s.json
 - name: ExtremeFemale
-  base_composite: StandardMale
+  composite: viva_pulse.composites.hemorrhage.pulse_hemorrhage
   parameter_overrides:
     state_file: ExtremeFemale@0s.json
 - name: ExtremeMale
-  base_composite: StandardMale
+  composite: viva_pulse.composites.hemorrhage.pulse_hemorrhage
   parameter_overrides:
     state_file: ExtremeMale@0s.json
 - name: Gus
-  base_composite: StandardMale
+  composite: viva_pulse.composites.hemorrhage.pulse_hemorrhage
   parameter_overrides:
     state_file: Gus@0s.json
 - name: Hassan
-  base_composite: StandardMale
+  composite: viva_pulse.composites.hemorrhage.pulse_hemorrhage
   parameter_overrides:
     state_file: Hassan@0s.json
 - name: Jane
-  base_composite: StandardMale
+  composite: viva_pulse.composites.hemorrhage.pulse_hemorrhage
   parameter_overrides:
     state_file: Jane@0s.json
 - name: Jeff
-  base_composite: StandardMale
+  composite: viva_pulse.composites.hemorrhage.pulse_hemorrhage
   parameter_overrides:
     state_file: Jeff@0s.json
 - name: Joel
-  base_composite: StandardMale
+  composite: viva_pulse.composites.hemorrhage.pulse_hemorrhage
   parameter_overrides:
     state_file: Joel@0s.json
 - name: Nathan
-  base_composite: StandardMale
+  composite: viva_pulse.composites.hemorrhage.pulse_hemorrhage
   parameter_overrides:
     state_file: Nathan@0s.json
 - name: Overweight
-  base_composite: StandardMale
+  composite: viva_pulse.composites.hemorrhage.pulse_hemorrhage
   parameter_overrides:
     state_file: Overweight@0s.json
 - name: Rick
-  base_composite: StandardMale
+  composite: viva_pulse.composites.hemorrhage.pulse_hemorrhage
   parameter_overrides:
     state_file: Rick@0s.json
 - name: Soldier
-  base_composite: StandardMale
+  composite: viva_pulse.composites.hemorrhage.pulse_hemorrhage
   parameter_overrides:
     state_file: Soldier@0s.json
 - name: StandardFemale
-  base_composite: StandardMale
+  composite: viva_pulse.composites.hemorrhage.pulse_hemorrhage
   parameter_overrides:
     state_file: StandardFemale@0s.json
 - name: Tachycardic
-  base_composite: StandardMale
+  composite: viva_pulse.composites.hemorrhage.pulse_hemorrhage
   parameter_overrides:
     state_file: Tachycardic@0s.json
 - name: Underweight
-  base_composite: StandardMale
+  composite: viva_pulse.composites.hemorrhage.pulse_hemorrhage
   parameter_overrides:
     state_file: Underweight@0s.json
 - name: Ventilated
-  base_composite: StandardMale
+  composite: viva_pulse.composites.hemorrhage.pulse_hemorrhage
   parameter_overrides:
     state_file: Ventilated@0s.json
 readouts:
@@ -258,6 +258,30 @@ falsifiability: 'Refuted if any patient fails to load or run, if any patient''s 
 limitations:
 - The 21 patients are Pulse's shipped examples, not a population sample.
 - The same severity number does not mean the same bleeding rate in every patient.
+- The negative control is established on a cohort member in the sibling study rather
+  than re-run for all 21 patients; a cohort-wide no-bleed sweep is a proposed
+  follow-up.
+- Acceptance rests on the deterministic pilot, not external literature (none was
+  provided), so the bands are regression checks, not a population validation.
+controls:
+- name: no-bleed
+  kind: negative
+  hypothesis: With no hemorrhage a patient loses no blood and vitals stay at their
+    loaded values, confirming the cohort's loss and compensation come from the bleed
+    and not from loading the state.
+  expected: Under 1 mL lost; MAP and heart rate within 1 unit of their start.
+  observed: Established on this engine for StandardMale (a cohort member) in the sibling
+    hemorrhage-severity-sweep study, severity-0.0 arm — 0 mL lost, MAP 95.3 -> 95.3,
+    heart rate 72.0 -> 71.2. A cohort-wide no-bleed sweep is a proposed follow-up.
+  result: PASS
+- name: ExtremeFemale
+  kind: positive
+  hypothesis: The smallest-volume patient, the extreme of the predictor, shows the
+    bleed-and-compensate response and sits at the high-fraction end of the trend.
+  expected: A clear bleed with compensation, and one of the largest fractions lost.
+  observed: 1094 mL lost on a 2881 mL starting volume (~38%), near the top of the
+    fraction range; blood volume and MAP fell and heart rate rose.
+  result: PASS
 runs:
 - name: viva_pulse.composites.hemorrhage.pulse_hemorrhage__1792749278__df9c1d
   status: completed
@@ -820,140 +844,140 @@ simulation_set:
   - irreversible-state
 - name: Bradycardic
   kind: single
-  base_model: StandardMale
+  base_model: viva_pulse.composites.hemorrhage.pulse_hemorrhage
   perturbation:
     state_file: Bradycardic@0s.json
   status: ran
   metrics: *id001
 - name: Carol
   kind: single
-  base_model: StandardMale
+  base_model: viva_pulse.composites.hemorrhage.pulse_hemorrhage
   perturbation:
     state_file: Carol@0s.json
   status: ran
   metrics: *id001
 - name: Cynthia
   kind: single
-  base_model: StandardMale
+  base_model: viva_pulse.composites.hemorrhage.pulse_hemorrhage
   perturbation:
     state_file: Cynthia@0s.json
   status: ran
   metrics: *id001
 - name: DefaultFemale
   kind: single
-  base_model: StandardMale
+  base_model: viva_pulse.composites.hemorrhage.pulse_hemorrhage
   perturbation:
     state_file: DefaultFemale@0s.json
   status: ran
   metrics: *id001
 - name: DefaultMale
   kind: single
-  base_model: StandardMale
+  base_model: viva_pulse.composites.hemorrhage.pulse_hemorrhage
   perturbation:
     state_file: DefaultMale@0s.json
   status: ran
   metrics: *id001
 - name: ExtremeFemale
   kind: single
-  base_model: StandardMale
+  base_model: viva_pulse.composites.hemorrhage.pulse_hemorrhage
   perturbation:
     state_file: ExtremeFemale@0s.json
   status: ran
   metrics: *id001
 - name: ExtremeMale
   kind: single
-  base_model: StandardMale
+  base_model: viva_pulse.composites.hemorrhage.pulse_hemorrhage
   perturbation:
     state_file: ExtremeMale@0s.json
   status: ran
   metrics: *id001
 - name: Gus
   kind: single
-  base_model: StandardMale
+  base_model: viva_pulse.composites.hemorrhage.pulse_hemorrhage
   perturbation:
     state_file: Gus@0s.json
   status: ran
   metrics: *id001
 - name: Hassan
   kind: single
-  base_model: StandardMale
+  base_model: viva_pulse.composites.hemorrhage.pulse_hemorrhage
   perturbation:
     state_file: Hassan@0s.json
   status: ran
   metrics: *id001
 - name: Jane
   kind: single
-  base_model: StandardMale
+  base_model: viva_pulse.composites.hemorrhage.pulse_hemorrhage
   perturbation:
     state_file: Jane@0s.json
   status: ran
   metrics: *id001
 - name: Jeff
   kind: single
-  base_model: StandardMale
+  base_model: viva_pulse.composites.hemorrhage.pulse_hemorrhage
   perturbation:
     state_file: Jeff@0s.json
   status: ran
   metrics: *id001
 - name: Joel
   kind: single
-  base_model: StandardMale
+  base_model: viva_pulse.composites.hemorrhage.pulse_hemorrhage
   perturbation:
     state_file: Joel@0s.json
   status: ran
   metrics: *id001
 - name: Nathan
   kind: single
-  base_model: StandardMale
+  base_model: viva_pulse.composites.hemorrhage.pulse_hemorrhage
   perturbation:
     state_file: Nathan@0s.json
   status: ran
   metrics: *id001
 - name: Overweight
   kind: single
-  base_model: StandardMale
+  base_model: viva_pulse.composites.hemorrhage.pulse_hemorrhage
   perturbation:
     state_file: Overweight@0s.json
   status: ran
   metrics: *id001
 - name: Rick
   kind: single
-  base_model: StandardMale
+  base_model: viva_pulse.composites.hemorrhage.pulse_hemorrhage
   perturbation:
     state_file: Rick@0s.json
   status: ran
   metrics: *id001
 - name: Soldier
   kind: single
-  base_model: StandardMale
+  base_model: viva_pulse.composites.hemorrhage.pulse_hemorrhage
   perturbation:
     state_file: Soldier@0s.json
   status: ran
   metrics: *id001
 - name: StandardFemale
   kind: single
-  base_model: StandardMale
+  base_model: viva_pulse.composites.hemorrhage.pulse_hemorrhage
   perturbation:
     state_file: StandardFemale@0s.json
   status: ran
   metrics: *id001
 - name: Tachycardic
   kind: single
-  base_model: StandardMale
+  base_model: viva_pulse.composites.hemorrhage.pulse_hemorrhage
   perturbation:
     state_file: Tachycardic@0s.json
   status: ran
   metrics: *id001
 - name: Underweight
   kind: single
-  base_model: StandardMale
+  base_model: viva_pulse.composites.hemorrhage.pulse_hemorrhage
   perturbation:
     state_file: Underweight@0s.json
   status: ran
   metrics: *id001
 - name: Ventilated
   kind: single
-  base_model: StandardMale
+  base_model: viva_pulse.composites.hemorrhage.pulse_hemorrhage
   perturbation:
     state_file: Ventilated@0s.json
   status: ran
@@ -997,6 +1021,45 @@ findings:
     study_tests:
     - tests/test_cohort.py::test_smaller_patients_lose_a_larger_fraction
     runs: 'canonical runs: investigation run of 2026-10-23 at commit 5754940 (runs.db)'
+- id: F-03
+  tier: mechanism
+  mechanism_origin: emergent
+  statement: The fraction-volume trend follows from a shared compensation, not from
+    different responses per patient. Every patient runs Pulse's same baroreflex (F-01),
+    and the absolute loss is much less variable (1094-1755 mL) than the starting volume
+    (2881-7072 mL); because a similar absolute loss is taken from very different
+    reserves, the fraction lost falls as starting volume rises (rho = -0.91). The
+    uniform mechanism, not patient-specific physiology, produces the correlation.
+  evidence:
+    study_tests:
+    - tests/test_cohort.py::test_every_patient_bleeds_and_compensates
+    - tests/test_cohort.py::test_smaller_patients_lose_a_larger_fraction
+    runs: 'canonical runs: investigation run of 2026-10-23 at commit 5754940 (runs.db)'
+alternative_hypotheses:
+- hypothesis: The fraction-volume correlation is driven by one or two outlier patients.
+  status: excluded
+  evidence: The correlation is Spearman (rank-based) over all 21 patients, rho = -0.91,
+    which is not set by a single extreme value.
+- hypothesis: Larger patients lose a larger fraction, or there is no relationship.
+  status: excluded
+  evidence: The rank correlation is strongly negative (-0.91); smaller patients lose
+    the larger fraction (F-02).
+- hypothesis: Some patients do not compensate (a qualitatively different response).
+  status: excluded
+  evidence: F-01 — all 21 patients bled, lost volume and raised heart rate, and none
+    reached an irreversible state.
+discovery_implications:
+  resolved: Across Pulse's 21 shipped patients the bleed-and-compensate response is
+    qualitatively uniform, and the fraction lost falls with starting blood volume.
+  remaining: Whether this holds for a real population rather than Pulse's shipped
+    examples, and whether one severity means the same bleeding rate across body sizes.
+  followup_study_proposals:
+  - title: cohort-no-bleed-control
+    motivation: Run the no-bleed arm for all 21 patients so the negative control is
+      cohort-wide rather than borrowed from the StandardMale sibling run.
+  - title: severity-calibrated-to-flow
+    motivation: Map Pulse severity to a per-patient flow rate so equal severity means
+      equal bleeding rate, isolating body size from bleed rate.
 conclusion: '## Claims
 
   The hypothesis holds (23/23 tests passed).
