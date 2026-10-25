@@ -9,6 +9,8 @@ output wires (``vitals/`` here), so the readout paths are checked against the
 realized composite instead.
 """
 
+import importlib
+import pkgutil
 import sqlite3
 from pathlib import Path
 
@@ -16,16 +18,29 @@ import pytest
 import yaml
 from process_bigraph import Composite, allocate_core
 from process_bigraph.composite_generator import _REGISTRY, build_generator
+from process_bigraph.visualization import Visualization
 from vivarium_workbench.lib.investigations import build_viz_composite, gather_emitter_outputs
 from vivarium_workbench.lib.study_runs import run_study_baseline, run_study_variant
 from vivarium_workbench.testing import Run
 
+import viva_pulse.visualizations
 from viva_pulse.core import build_core
 from viva_pulse.runtime import resolve_install_dir
-from viva_pulse.visualizations.cohort_blood_loss import CohortBloodLoss
-from viva_pulse.visualizations.hemorrhage_severity_response import HemorrhageSeverityResponse
 
-VISUALIZATIONS = {cls.__name__: cls for cls in (CohortBloodLoss, HemorrhageSeverityResponse)}
+
+def _visualization_classes():
+    """Every ``Visualization`` subclass in ``viva_pulse.visualizations``'s submodules: the
+    rule the workbench's env worker registers them by, so a new figure is never missed."""
+    classes = {}
+    for module in pkgutil.iter_modules(viva_pulse.visualizations.__path__):
+        namespace = vars(importlib.import_module(f"viva_pulse.visualizations.{module.name}"))
+        classes.update({value.__name__: value for value in namespace.values()
+                        if isinstance(value, type) and issubclass(value, Visualization)
+                        and value is not Visualization})
+    return classes
+
+
+VISUALIZATIONS = _visualization_classes()
 
 ROOT = Path(__file__).resolve().parents[1]
 STUDIES = ROOT / "workspace" / "studies"
