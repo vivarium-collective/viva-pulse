@@ -11,6 +11,7 @@ from process_bigraph import Process, Step
 from .circuits import ENGINE_MODEL_TYPES, MODULES
 from .circuits.base import check_outputs
 from .circuits.cardiovascular import HEMORRHAGE_COMPARTMENTS
+from .patients import stabilized_state
 from .runtime import ensure_pulse_importable
 
 #: Output port -> (Pulse physiology property, scalar unit class, unit attribute on
@@ -32,6 +33,7 @@ VITALS: dict[str, tuple[str, str | None, str | None]] = {
 def _load_engine(install_dir: str, model_type: str, state_file: str, requests: list):
     """Load a stabilized Pulse state into a new engine of ``model_type``.
 
+    ``state_file`` is a name in ``<install>/bin/states/`` or an absolute path.
     ``model_type`` is a ``pulse.engine.PulseEngine.eModelType`` member name.
     ``requests`` are ``SEDataRequest``s; ``pull_data()[1:]`` follows their order.
     The engine is advanced by 0 s so ``pull_data()`` holds the loaded state's values.
@@ -80,6 +82,28 @@ def _load_state(install_dir: str, model_type: str, state: dict[str, Any], reques
     return engine
 
 
+def _check_whole_body_start(config: dict, schema: dict) -> None:
+    """A whole-body engine starts from ``state_file`` or from ``patient_file``, not both.
+
+    bigraph-schema replaces an explicit value equal to the default with the
+    default, so only a non-default value counts as set. The default patient,
+    StandardMale, ships a state anyway.
+    """
+    if all(config[key] != schema[key]["_default"] for key in ("state_file", "patient_file")):
+        raise ValueError(f"state_file {config['state_file']!r} and patient_file "
+                         f"{config['patient_file']!r} are both set; a whole-body engine starts "
+                         "from one of them")
+
+
+def _whole_body_state(config: dict, schema: dict) -> str:
+    """The state a whole-body engine loads: ``state_file``, or, when ``patient_file``
+    is set, the patient's stabilized state (an absolute path into the cache; see
+    ``viva_pulse.patients``)."""
+    if config["patient_file"] == schema["patient_file"]["_default"]:
+        return config["state_file"]
+    return str(stabilized_state(config["patient_file"], config["install_dir"]))
+
+
 def _initialize_engine(install_dir: str, model_type: str, patient_file: str, requests: list):
     """Initialize a new engine of ``model_type`` from ``<install>/bin/patients/<patient_file>``.
 
@@ -113,7 +137,10 @@ class PulseProcess(Process):
     """Time-stepped bridge to the real Pulse whole-body adult engine.
 
     The engine is loaded from a stabilized Pulse state file and advanced by
-    ``interval`` seconds on every update. Interventions arrive as setpoints on
+    ``interval`` seconds on every update. ``state_file`` names a state Pulse
+    ships; setting ``patient_file`` instead (a name in ``<install>/bin/patients/``
+    or a path) starts from that patient, stabilized once and then cached (see
+    ``viva_pulse.patients``). Setting both raises. Interventions arrive as setpoints on
     the input ports and are forwarded to Pulse as patient actions only when
     their value changes.
 
@@ -138,6 +165,7 @@ class PulseProcess(Process):
 
     config_schema = {
         "state_file": {"_type": "string", "_default": "StandardMale@0s.json"},
+        "patient_file": {"_type": "string", "_default": "StandardMale.json"},
         "install_dir": {"_type": "string", "_default": ""},
         "hemorrhage_compartment": {"_type": "string", "_default": "RightLeg"},
         "iv_compound": {"_type": "string", "_default": "Saline"},
@@ -146,6 +174,7 @@ class PulseProcess(Process):
 
     def __init__(self, config=None, core=None):
         super().__init__(config=config, core=core)
+        _check_whole_body_start(self.config, self.config_schema)
         if self.config["hemorrhage_compartment"] not in HEMORRHAGE_COMPARTMENTS:
             raise ValueError(
                 f"hemorrhage_compartment must be one of {HEMORRHAGE_COMPARTMENTS}, "
@@ -198,7 +227,7 @@ class PulseProcess(Process):
             requests.append(SEDataRequest.create_physiology_request(prop, unit=unit))
 
         self._engine = _load_engine(self.config["install_dir"], "HumanAdultWholeBody",
-                                    self.config["state_file"], requests)
+                                    _whole_body_state(self.config, self.config_schema), requests)
         return self._engine
 
     def _read_vitals(self) -> dict[str, float]:
@@ -318,10 +347,12 @@ class PulseCircuitProcess(Process):
     module's ``airway_device`` connected, and none connecting in the update in
     which another disconnects.
 
-    WholeBody loads a stabilized ``state_file``. VentilationMechanics has no
+    WholeBody loads a stabilized ``state_file``, or, when ``patient_file`` is
+    set instead, that patient's state, stabilized once and then cached (see
+    ``viva_pulse.patients``); setting both raises. VentilationMechanics has no
     state files, so it initializes from ``patient_file`` and then settles (see
-    ``_settle``) before t = 0. Setting the file the chosen engine does not use
-    to anything but its default raises, instead of being silently ignored.
+    ``_settle``) before t = 0; setting ``state_file`` on it raises, instead of
+    being silently ignored.
     Setpoints, including connecting a ventilator, apply from the first update,
     so row 0 always shows the engine as loaded or settled.
 
@@ -339,11 +370,11 @@ class PulseCircuitProcess(Process):
             known = "known" if model_type in ENGINE_MODEL_TYPES else "unknown"
             raise ValueError(f"model_type {model_type!r} ({known}) is not supported; "
                              f"supported: {sorted(SUPPORTED_MODEL_TYPES)}")
-        used = "patient_file" if model_type in _INITIALIZED_FROM_PATIENT else "state_file"
-        for key in ("state_file", "patient_file"):
-            if key != used and self.config[key] != self.config_schema[key]["_default"]:
-                raise ValueError(f"{key} {self.config[key]!r} is not used by model_type {model_type!r}, "
-                                 f"which starts from {used}")
+        if model_type not in _INITIALIZED_FROM_PATIENT:
+            _check_whole_body_start(self.config, self.config_schema)
+        elif self.config["state_file"] != self.config_schema["state_file"]["_default"]:
+            raise ValueError(f"state_file {self.config['state_file']!r} is not used by model_type "
+                             f"{model_type!r}, which starts from patient_file")
         names = list(self.config["modules"])
         if not names:
             raise ValueError(f"modules must name at least one of {sorted(MODULES)}")
@@ -365,7 +396,7 @@ class PulseCircuitProcess(Process):
         self._state = None
         outputs = {module.name: module.outputs for module in self._modules}
         if any(module.prepare_state for module in self._modules):
-            self._state = _read_state(self.config["install_dir"], self.config["state_file"])
+            self._state = _read_state(self.config["install_dir"], _whole_body_state(self.config, self.config_schema))
             for module in self._modules:
                 if module.prepare_state:
                     outputs[module.name] = module.prepare_state(self.config, self._state)
@@ -424,7 +455,7 @@ class PulseCircuitProcess(Process):
             self._state = None  # loaded; the parsed state is no longer needed
         else:
             engine = _load_engine(self.config["install_dir"], SUPPORTED_MODEL_TYPES[model_type],
-                                  self.config["state_file"], requests)
+                                  _whole_body_state(self.config, self.config_schema), requests)
         values = self._pull(engine)
         loaded = _nest([(path, values[i]) for path, i in self._slots])
         for module in self._modules:

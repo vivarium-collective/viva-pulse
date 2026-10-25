@@ -7,7 +7,8 @@ automatic discovery can miss editable installs.
 ## `PulseProcess`: whole-body vital signs
 
 Loads a stabilized Pulse state (default `StandardMale@0s.json`) the first time it's used, then
-advances the engine by `interval` seconds per update.
+advances the engine by `interval` seconds per update. To start from a patient Pulse ships no
+state for, set `patient_file` instead of `state_file` (see [Any patient](#any-patient)).
 
 - **Inputs** `hemorrhage_severity` and `iv_rate_mL_per_min` are setpoints, sent to Pulse as
   actions only when they change. The bleed site is the `hemorrhage_compartment` config and the
@@ -36,14 +37,43 @@ One real Pulse engine exposing the circuit modules named in `config.modules` (se
 - Identical requests from several modules share one Pulse request. A request Pulse can't serve
   returns NaN, so the process fails the load, or the update where it appears, instead of
   emitting NaN.
-- `model_type` picks the engine. `whole_body` loads a `state_file`. `ventilation_mechanics`
-  (airway only) has no state files: it starts from a `patient_file` and settles, in one-second
-  steps, until every requested value is defined. Setting the file the chosen engine doesn't
-  use raises an error.
+- `model_type` picks the engine. `whole_body` loads a `state_file`, or any patient through
+  `patient_file` (see [Any patient](#any-patient)); setting both raises an error.
+  `ventilation_mechanics` (airway only) has no state files: it starts from a `patient_file`
+  and settles, in one-second steps, until every requested value is defined. A `state_file`
+  on it raises an error.
 
 Inputs and outputs use different top-level names on purpose: process-bigraph projects
 `initial_state()` through input wires too, so a shared name would copy readings into the
 setpoint store.
+
+## Any patient
+
+Pulse ships stabilized states for 21 of its patients. Any other Pulse patient file runs on
+the whole-body engine through `patient_file`, on `PulseProcess`, on `PulseCircuitProcess`
+with `model_type: whole_body`, and on every composite that takes `state_file`. Leave
+`state_file` at its default; setting both raises an error.
+
+- A bare name (`"Gus.json"`) is a file in `<install>/bin/patients/`. Anything containing a path
+  separator is a path, relative to the working directory, so a patient in a subdirectory of
+  `bin/patients/` needs its full path. A missing file raises `FileNotFoundError`. (On
+  `ventilation_mechanics`, `patient_file` is resolved under `bin/patients/` as before.)
+- The first run stabilizes the patient with Pulse's own `initialize_engine` (about 13 s) and
+  saves the result as a state file. Every later run of the same patient loads that file
+  (about 0.04 s). {mod}`viva_pulse.patients` does this.
+- The cache key covers the patient file's contents, the Pulse install (version, git hash, a
+  digest of the `PyPulse` binary and a digest of the data files Pulse reads at
+  initialization) and the engine type. Editing the patient file, changing Pulse's code or its
+  data files makes a new state.
+- The cache lives in `$VIVA_PULSE_CACHE_DIR` if set, otherwise in `states/` under the user
+  cache directory (`~/Library/Caches/viva-pulse` on macOS, `~/.cache/viva-pulse` on Linux).
+  Deleting it is always safe.
+- A run from the cache matches an engine stabilized directly from the same patient to within
+  1e-6 relative after 30 s. It is not bit-identical, because the state round-trips through
+  JSON.
+- `patient_file` defaults to `StandardMale.json`. bigraph-schema treats a value equal to the
+  default as unset, so `patient_file="StandardMale.json"` uses `state_file`; StandardMale
+  ships a state anyway.
 
 ## `MapFluidController`: a closed-loop Step
 

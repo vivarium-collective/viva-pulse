@@ -86,15 +86,15 @@ All use `fidelity="real-bridge"`.
   - With a ventilator or oxygen module on the same engine, the two airway openings are left out, because Pulse stops solving them while a device is connected.
 
 - **Whole-body runs** load Pulse's stabilized state files (`<install>/bin/states/*.json`, default `StandardMale@0s.json`).
-- **Ventilation-mechanics runs** have no state files. They start from a patient file (`<install>/bin/patients/*.json`, default `StandardMale.json`), then settle before t=0 until every requested value is defined, which takes about one breath.
-- Setting the file the chosen engine doesn't use (a `state_file` on ventilation-mechanics, a `patient_file` on whole-body) raises an error instead of being ignored.
+- **Any other patient** runs on the whole body through `patient_file` instead of `state_file` (see [Any patient](#any-patient)). Setting both raises an error.
+- **Ventilation-mechanics runs** have no state files. They start from a patient file (`<install>/bin/patients/*.json`, default `StandardMale.json`), then settle before t=0 until every requested value is defined, which takes about one breath. A `state_file` on ventilation-mechanics raises an error instead of being ignored.
 - Setpoints apply from the first update. In `pulse_mechanical_ventilation`, the patient settles breathing spontaneously, so row 0 shows the ventilator monitor at 0 even though `interventions` say `connected=1`. The monitor values appear once the first ventilated breath completes, a few seconds in.
 - In `AssistedControl` mode, a ventilator rate above the patient's own can lock Pulse into auto-triggering (about 50 breaths/min with high intrinsic PEEP). This is Pulse's own behavior and reproduces through its API alone. Use `ContinuousMandatoryVentilation` when the set rate must hold.
 
 ### Processes
 
 - **`PulseProcess`**:
-  - Loads a stabilized Pulse state and advances the engine by `interval` seconds per update.
+  - Loads a stabilized Pulse state (`state_file`, or any patient through `patient_file`) and advances the engine by `interval` seconds per update.
   - Inputs `hemorrhage_severity` and `iv_rate_mL_per_min` are setpoints, sent to Pulse as actions only when they change.
   - Outputs are nine vital signs plus an `irreversible_state` flag. Vitals are `float` ports carrying deltas, seeded with the loaded readings, so each store always equals Pulse's own value. The reason for this design is in `.build-progress.md`.
 - **`PulseCircuitProcess`**: one real Pulse engine exposing the circuit modules named in `config.modules` (see `viva_pulse/circuits/`).
@@ -105,6 +105,21 @@ All use `fidelity="real-bridge"`.
   - The `cardiovascular_points` and `respiratory_points` modules read single circuit nodes and paths. By default they read every one. The config lists `cardiovascular_point_nodes` / `cardiovascular_point_paths` (and the `respiratory_` pair) narrow that to the names given. Pulse has no data request for a node or path, so before loading, the process adds a compartment for each node and a link for each path to the state, and reads them with ordinary requests. The simulation is unchanged (bit-identical with and without them).
   - Pulse allows one airway device at a time. A second one connecting makes every engine step fail, so the process raises instead: when the ventilator and oxygen are both connected, or when one connects in the same update the other disconnects. To switch devices, disconnect one update before connecting the other.
 - **`MapFluidController`**: a proportional `Step` that maps mean arterial pressure to IV infusion rate.
+
+### Any patient
+
+Pulse ships stabilized states for 21 of its patients. To run any other patient on the whole-body engine, pass a Pulse patient file as `patient_file` (to `PulseProcess`, to `PulseCircuitProcess` with `model_type: whole_body`, or to any composite that takes `state_file`), and leave `state_file` at its default:
+
+```python
+doc = pulse_hemorrhage(core, patient_file="my_patients/Athlete.json", severity=0.5)
+```
+
+- A bare name (`"Gus.json"`) is a file in `<install>/bin/patients/`; anything containing a path separator is a path, relative to the working directory, so a patient in a subdirectory of `bin/patients/` needs its full path. A missing file raises `FileNotFoundError`. (On ventilation-mechanics, `patient_file` is resolved as before: a name or a path under `bin/patients/`, or an absolute path.)
+- The first run stabilizes the patient with Pulse's own `initialize_engine` (about 13 s) and saves the result as a state file. Every later run of the same patient loads that file (about 0.04 s).
+- The cache is keyed by the patient file's contents, the Pulse install (version, git hash, a digest of the `PyPulse` binary and a digest of the data files Pulse reads at initialization) and the engine type. Editing the patient file, changing Pulse's code or its data files makes a new state.
+- The cache lives in `$VIVA_PULSE_CACHE_DIR` if set, otherwise in the user cache directory (`platformdirs.user_cache_path("viva-pulse")/states`, e.g. `~/Library/Caches/viva-pulse/states` on macOS). Deleting it is always safe.
+- A run from the cache matches an engine stabilized directly from the same patient to within 1e-6 relative after 30 s. It is not bit-identical, because the state round-trips through JSON.
+- `patient_file` defaults to `StandardMale.json`, and bigraph-schema treats a value equal to the default as unset, so `patient_file="StandardMale.json"` uses `state_file`. StandardMale ships a state anyway.
 
 ## Pulse circuits
 

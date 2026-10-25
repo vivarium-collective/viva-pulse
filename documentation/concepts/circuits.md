@@ -59,8 +59,9 @@ as `LeftHeart1`, and every path between two nodes, such as `Aorta1ToBone1`.
   `EnvironmentToNasalCavity` aren't read. While a device is connected, Pulse replaces them with
   the device's own connection and stops solving them, so they would hold their last flow. Naming
   one of them then raises an error.
-- **Construction reads the state file.** A process with a point module parses `state_file` when
-  it is built, so it needs the Pulse install from that point on.
+- **Construction reads the state file.** A process with a point module parses its starting state
+  when it is built, so it needs the Pulse install from that point on. With a `patient_file`, that
+  is the patient's cached state, which is stabilized first (about 13 s) if it isn't cached yet.
 - **Engine.** Points need `model_type: whole_body`, because they work by editing the state file
   before it loads.
 - **In a composite.** Set `point_reads=True` on `pulse_cardiovascular`, `pulse_respiratory` or

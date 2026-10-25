@@ -95,3 +95,5 @@ fig.tight_layout()
   `compound="Blood"` to infuse whole blood.
 - Run the same bleed in another patient with `state_file`, for example
   `"Underweight@0s.json"`. The {doc}`../results/pulse-hemorrhage` page does this for all 21.
+  For a patient Pulse ships no state for, pass its patient file as `patient_file` instead
+  (see [Any patient](../concepts/processes.md#any-patient)).
