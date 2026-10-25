@@ -19,8 +19,8 @@ classifiers = [
 # PULSE_INSTALL_DIR at the install prefix. These are the runtime deps of
 # Pulse's own Python API; protobuf must match the Pulse build (7.35.x).
 dependencies = [
-    "bigraph-schema>=1.8",
-    "process-bigraph>=1.10",
+    "bigraph-schema>=1.8.3",
+    "process-bigraph>=1.10.1",
     "numpy",
     "pandas",
     "platformdirs",  # cache directory for stabilized patient states
@@ -51,7 +51,7 @@ docs = [
 # The workbench runs studies in this project's own venv (it is the only one
 # that can import PyPulse), so it is pinned to the main commit installed there.
 [tool.uv.sources]
-vivarium-workbench = { git = "https://github.com/vivarium-collective/vivarium-workbench.git", rev = "aa2b7d2b6f0c6c9d87bf5968e82694e522eb7ea9" }
+vivarium-workbench = { git = "https://github.com/vivarium-collective/vivarium-workbench.git", rev = "7c1132a70b128c8dc52d07ea71a16fb32cae838e" }
 
 [tool.hatch.build.targets.wheel]
 packages = ["viva_pulse"]
