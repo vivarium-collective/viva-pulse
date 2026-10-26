@@ -144,7 +144,12 @@ python -m viva_pulse.states StandardMale@0s.json --times 60 120 --out states/
 - A reloaded state continues the run to about 2e-8 relative (saved at 10 s, advanced 20 s),
   not bit-identically.
 - Each state is saved at the first Pulse step (0.02 s) at or after its time; two times within
-  one step raise, and an existing file is never overwritten.
+  one step raise, and an existing file is never overwritten. To merge time lists from several
+  sources, round each time up to its step and drop duplicates first:
+  `times = sorted({math.ceil(round(t / 0.02, 6)) * 0.02 for t in times})`.
+- Pass all times in one call. Measured on an Apple-silicon Mac, saving every step costs about
+  26 ms and 2.5 MB per state (about twice the time with one call per state), and the engine
+  runs about 33x faster than real time between saves.
 - Whole-body engines only (Pulse doesn't serialize ventilation-mechanics). `save_states` drives
   the engine it is given, so it is for an engine you hold.
 - In a composite, `PulseProcess` and `PulseCircuitProcess` save their own engine: set
