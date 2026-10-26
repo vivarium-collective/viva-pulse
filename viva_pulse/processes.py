@@ -234,10 +234,9 @@ class PulseProcess(Process):
 
     Outputs
     -------
-    Vital signs (see ``VITALS``) as ``float``. Pulse reports absolute values;
-    ``initial_state()`` seeds each store with the loaded state's reading and
-    every update emits ``current - previous``, so the store always equals
-    Pulse's own value and composes additively with sibling writers.
+    Vital signs (see ``VITALS``) as ``overwrite[float]``: ``initial_state()``
+    seeds each store with the loaded state's reading and every update emits
+    Pulse's current reading, so the store always equals Pulse's own value.
     ``irreversible_state`` turns True once Pulse reports an irreversible
     state; the engine is not advanced after that, so the vitals stores keep
     the last reading Pulse produced.
@@ -278,7 +277,6 @@ class PulseProcess(Process):
             add_paths(self._state, self.config["circuit_additions"])
         self._alive = True
         self._applied: dict[str, float | None] = {"hemorrhage_severity": 0.0, "iv_rate_mL_per_min": 0.0}
-        self._previous: dict[str, float] = {}
 
     def inputs(self):
         return {
@@ -287,7 +285,7 @@ class PulseProcess(Process):
         }
 
     def outputs(self):
-        ports: dict[str, Any] = {name: "float" for name in VITALS}
+        ports: dict[str, Any] = {name: "overwrite[float]" for name in VITALS}
         ports["irreversible_state"] = "boolean"
         return ports
 
@@ -295,7 +293,7 @@ class PulseProcess(Process):
         return {
             "hemorrhage_severity": 0.0,
             "iv_rate_mL_per_min": 0.0,
-            **self._previous_readings(),
+            **self._read_vitals(),
             "irreversible_state": False,
         }
 
@@ -339,11 +337,6 @@ class PulseProcess(Process):
         values = self._ensure_engine().pull_data()
         return {name: float(v) for name, v in zip(VITALS, values[1:])}
 
-    def _previous_readings(self) -> dict[str, float]:
-        if not self._previous:
-            self._previous = self._read_vitals()
-        return dict(self._previous)
-
     def _action(self, port: str, value: float):
         """The Pulse action for one setpoint."""
         from pulse.cdm.patient_actions import SEHemorrhage, SESubstanceCompoundInfusion
@@ -381,16 +374,13 @@ class PulseProcess(Process):
         engine = self._ensure_engine()
         if not self._alive:
             return {}
-        previous = self._previous_readings()
         self._apply_interventions(engine, state)
         if not engine.advance_time_s(float(interval)):
             self._alive = False
             return {"irreversible_state": True}
         if self._saver:
             self._saver(engine)
-        current = self._read_vitals()
-        self._previous = current
-        return {name: current[name] - previous[name] for name in VITALS}
+        return self._read_vitals()
 
 
 # Engines PulseCircuitProcess can load, mapped to eModelType member names. WholeBody
@@ -444,7 +434,7 @@ class PulseCircuitProcess(Process):
     ``config.modules`` names entries of ``viva_pulse.circuits.MODULES``. Each
     module contributes a port subtree named after it:
 
-    - outputs: the module's Pulse data requests as ``float`` ports, at the
+    - outputs: the module's Pulse data requests as ``overwrite[float]`` ports, at the
       module's nested paths (e.g. ``cardiovascular/central/aorta/pressure_mmHg``);
     - inputs, under the single ``setpoints`` port: the module's setpoints as
       ``overwrite[float]`` ports whose schema default is the baseline value,
@@ -457,8 +447,8 @@ class PulseCircuitProcess(Process):
     setpoint store.
 
     Outputs follow ``PulseProcess``'s contract. ``initial_state()`` seeds each
-    store with the loaded state's reading and every update emits
-    ``current - previous``, so the store always equals Pulse's own value.
+    store with the loaded state's reading and every update emits Pulse's current
+    reading, so the store always equals Pulse's own value.
     ``irreversible_state`` turns True once Pulse reports an irreversible state;
     the engine is not advanced after that. Identical requests from different
     modules share one Pulse request. A request that Pulse cannot serve (it
@@ -553,7 +543,6 @@ class PulseCircuitProcess(Process):
                          for module in self._modules for i, binding in enumerate(module.bindings)}
         self._engine = None
         self._alive = True
-        self._previous: list[float] = []
 
     def inputs(self):
         return {"setpoints": {module.name: {port: {"_type": "overwrite[float]", "_default": default}
@@ -562,13 +551,13 @@ class PulseCircuitProcess(Process):
                               for module in self._modules if module.bindings}}
 
     def outputs(self):
-        ports = _nest([(path, "float") for path, _ in self._slots])
+        ports = _nest([(path, "overwrite[float]") for path, _ in self._slots])
         ports["irreversible_state"] = "boolean"
         return ports
 
     def initial_state(self):
         # Setpoint baselines come from the input schema ``_default``s.
-        readings = self._readings()
+        readings = self._pull(self._ensure_engine())
         state = _nest([(path, readings[i]) for path, i in self._slots])
         state["irreversible_state"] = False
         return state
@@ -611,7 +600,6 @@ class PulseCircuitProcess(Process):
             if module.check_loaded:
                 module.check_loaded(loaded[module.name])
         self._engine = engine
-        self._previous = values
         if self._saver:
             self._saver(engine)
         return engine
@@ -637,7 +625,7 @@ class PulseCircuitProcess(Process):
 
     def _pull(self, engine) -> list[float]:
         """Current readings in request order; NaN (a request Pulse cannot serve)
-        raises, because a NaN delta would poison its store for the rest of the run."""
+        raises, naming the request."""
         raw = iter(float(v) for v in engine.pull_data()[1:])
         values = []
         for request in self._requests:
@@ -651,10 +639,6 @@ class PulseCircuitProcess(Process):
                 f"{r.category}:{r.compartment + '.' if r.compartment else ''}{r.property}"
                 + (f"-{r.minus}" if r.minus else "") for r in unserved))
         return values
-
-    def _readings(self) -> list[float]:
-        self._ensure_engine()
-        return list(self._previous)
 
     def _tree(self, value: Callable[[int], float]) -> dict[str, Any]:
         return _nest([(path, value(i)) for path, i in self._slots])
@@ -707,7 +691,6 @@ class PulseCircuitProcess(Process):
         engine = self._ensure_engine()
         if not self._alive:
             return {}
-        previous = self._readings()
         self._apply_setpoints(engine, state)
         if not engine.advance_time_s(float(interval)):
             self._alive = False
@@ -715,8 +698,7 @@ class PulseCircuitProcess(Process):
         if self._saver:
             self._saver(engine)
         current = self._pull(engine)
-        self._previous = current
-        return self._tree(lambda i: current[i] - previous[i])
+        return self._tree(lambda i: current[i])
 
 
 class MapFluidController(Step):

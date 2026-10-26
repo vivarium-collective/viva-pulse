@@ -21,19 +21,16 @@ def test_initial_state_is_the_loaded_pulse_state():
     assert state["irreversible_state"] is False
 
 
-def test_update_emits_deltas_that_accumulate_to_pulse_readings():
+def test_update_emits_pulse_readings():
+    """Falsifies: an update emits a delta or a stale value instead of Pulse's current
+    reading. (Port mapping is checked against independent engines in test_patients.)"""
     proc = make_pulse()
-    stores = {k: v for k, v in proc.initial_state().items() if k in VITALS}
     controls = {"hemorrhage_severity": 0.5, "iv_rate_mL_per_min": 0.0}
     for _ in range(30):
         update = proc.update(controls, 1.0)
         assert set(update) == set(VITALS)
-        for k, delta in update.items():
-            stores[k] += delta
-    truth = proc._read_vitals()
-    for k in VITALS:
-        assert stores[k] == pytest.approx(truth[k], abs=1e-6)
-    assert truth["total_hemorrhaged_volume_mL"] > 0.0
+        assert update == dict(zip(VITALS, proc._engine.pull_data()[1:]))
+    assert update["total_hemorrhaged_volume_mL"] > 0.0
 
 
 def test_hemorrhage_lowers_blood_volume_and_raises_heart_rate():

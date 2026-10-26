@@ -262,7 +262,7 @@ def test_staged_handover_from_ventilator_to_oxygen_works():
     for _ in range(4):
         update = process.update(_airway(0.0, 1.0), 30.0)
         assert "irreversible_state" not in update
-    fio2 = process._previous[[r.property for r in process._requests].index("FractionOfInspiredOxygen")]
+    fio2 = process._pull(process._engine)[[r.property for r in process._requests].index("FractionOfInspiredOxygen")]
     assert fio2 > 0.4
 
 

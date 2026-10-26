@@ -130,10 +130,7 @@ def test_cached_state_matches_a_cold_stabilization(cache, patient, first_load):
     expected = dict(zip(VITALS, cold.pull_data()[1:]))
 
     process = PulseProcess({"patient_file": str(patient)}, core=build_core())
-    stores = {k: v for k, v in process.initial_state().items() if k in VITALS}
-    for name, delta in process.update({"hemorrhage_severity": 0.0, "iv_rate_mL_per_min": 0.0},
-                                      30.0).items():
-        stores[name] += delta
+    stores = process.update({"hemorrhage_severity": 0.0, "iv_rate_mL_per_min": 0.0}, 30.0)
     assert _unchanged(first_load)  # the process loaded the cached file, not a new one
     for name in VITALS:
         assert stores[name] == pytest.approx(expected[name], rel=1e-6, abs=1e-9), name

@@ -149,9 +149,9 @@ def test_a_selection_reads_only_the_named_points():
                                    "cardiovascular_point_nodes": ["LeftHeart1", "LeftHeart2"],
                                    "cardiovascular_point_paths": ["Aorta1ToBone1"]}, core=build_core())
     assert process.outputs()["cardiovascular_points"] == {
-        "nodes": {"LeftHeart1": {"pressure_mmHg": "float", "volume_mL": "float"},
-                  "LeftHeart2": {"pressure_mmHg": "float"}},
-        "paths": {"Aorta1ToBone1": {"flow_mL_per_min": "float"}},
+        "nodes": {"LeftHeart1": {"pressure_mmHg": "overwrite[float]", "volume_mL": "overwrite[float]"},
+                  "LeftHeart2": {"pressure_mmHg": "overwrite[float]"}},
+        "paths": {"Aorta1ToBone1": {"flow_mL_per_min": "overwrite[float]"}},
     }
     state = process.initial_state()["cardiovascular_points"]
     assert state["nodes"]["LeftHeart2"]["pressure_mmHg"] > 0

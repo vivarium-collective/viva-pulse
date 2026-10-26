@@ -16,10 +16,9 @@ state for, set `patient_file` instead of `state_file` (see [Any patient](#any-pa
   an unknown one fails when the engine loads).
 - **Outputs** are nine vital signs plus an `irreversible_state` flag.
 
-The vital-sign outputs are delta ports. `initial_state()` seeds each store with the reading
-Pulse loaded, and every update emits the change since the last one, so the store always
-equals Pulse's own value. This is deliberate: process-bigraph discards `initial_state()`
-values on `overwrite[float]` and `boolean` output ports, which would make the first row zero.
+The vital-sign outputs are `overwrite[float]` ports. `initial_state()` seeds each store with
+the reading Pulse loaded, and every update emits Pulse's current reading, so the store always
+equals Pulse's own value.
 
 Once Pulse reports an irreversible state, the process stops advancing the engine and its
 updates return nothing, so the vitals keep their last reading while time continues.
@@ -29,7 +28,7 @@ updates return nothing, so the vitals keep their last reading while time continu
 One real Pulse engine exposing the circuit modules named in `config.modules` (see
 {doc}`circuits`).
 
-- Each module's readings form a nested subtree of delta ports, for example
+- Each module's readings form a nested subtree of `overwrite[float]` ports, for example
   `cardiovascular/central/aorta/pressure_mmHg`.
 - Its setpoints sit under the single input port `setpoints`, for example
   `setpoints/cardiovascular/hemorrhage_severity`. Each defaults to its baseline (multipliers

@@ -216,7 +216,8 @@ def test_setpoints_default_to_baseline_without_interventions():
 
 
 def test_first_row_carries_loaded_values(run_composite):
-    """Falsifies: nested delta ports start from 0 instead of Pulse's loaded state."""
+    """Falsifies: nested overwrite ports start from 0 instead of Pulse's loaded state
+    (process-bigraph dropping ``initial_state()`` on them, as before 1.10.1)."""
     paths = [("hemodynamics", "mean_arterial_pressure_mmHg"), ("central", "aorta", "pressure_mmHg"),
              ("peripheral", "right_leg", "volume_mL"), ("renal", "left_kidney", "inflow_mL_per_min")]
     oracle = _direct_engine(paths, 0.0)
@@ -226,10 +227,10 @@ def test_first_row_carries_loaded_values(run_composite):
         assert _at(_cv(rows[0]), path) == pytest.approx(expected, rel=1e-9), path
 
 
-def test_store_tracks_pulse_after_accumulating_deltas(run_composite):
-    """Falsifies: deltas accumulate wrongly or land on the wrong store (request-index
-    mix-up). The stores after 20 one-second updates must equal an independent engine
-    advanced 20 s in one call."""
+def test_store_tracks_pulse(run_composite):
+    """Falsifies: readings land on the wrong store (request-index mix-up), or stores
+    don't hold Pulse's reading (e.g. emitted values added to them). The stores after
+    20 one-second updates must equal an independent engine advanced 20 s in one call."""
     paths = [("hemodynamics", "heart_rate_bpm"), ("hemodynamics", "blood_volume_mL"),
              ("central", "aorta", "pressure_mmHg"), ("central", "left_heart", "volume_mL"),
              ("renal", "right_glomerular_capillaries", "outflow_mL_per_min"),
@@ -378,14 +379,8 @@ def test_identical_requests_across_modules_share_values(monkeypatch):
     monkeypatch.setitem(MODULES, "twin", twin)
     process = PulseCircuitProcess({"modules": ["cardiovascular", "twin"]}, core=build_core())
     assert len(process._requests) == len(CARDIOVASCULAR.outputs)
-    state = process.initial_state()
     for _ in range(5):
-        delta = process.update(_baseline_setpoints(), 1.0)
-        for path, value in _leaves(delta):
-            node = state
-            for key in path[:-1]:
-                node = node[key]
-            node[path[-1]] += value
+        state = process.update(_baseline_setpoints(), 1.0)
     oracle = _direct_engine([("hemodynamics", "mean_arterial_pressure_mmHg"), ("central", "aorta", "pressure_mmHg")], 5.0)
     assert state["twin"]["map"] == state["cardiovascular"]["hemodynamics"]["mean_arterial_pressure_mmHg"]
     assert state["twin"]["aorta"] == state["cardiovascular"]["central"]["aorta"]["pressure_mmHg"]
