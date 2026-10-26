@@ -35,6 +35,34 @@ args=(--workspace "$WS_ROOT" --out "$OUT")
 [ -n "$BASE_PATH" ] && args+=(--base-path "$BASE_PATH")
 [ -n "$INTERACTIVE_URL" ] && args+=(--interactive-url "$INTERACTIVE_URL")
 
+# Render each study's declared figures BEFORE building the bundle. The rendered
+# figures live in studies/<slug>/viz/ which is gitignored, so a fresh checkout
+# (e.g. CI) has none and the published snapshot would ship with empty
+# Visualizations tabs. render_viz is standalone — it reads each study's committed
+# runs.db, no server and no simulator engine needed — so it works in CI. A study
+# that fails to render is skipped, never failing the publish.
+PYTHONPATH="$WS_ROOT${PYTHONPATH:+:$PYTHONPATH}" python - "$WS_ROOT" <<'PY'
+import sys
+from pathlib import Path
+ws = Path(sys.argv[1])
+try:
+    from vivarium_workbench.lib.investigation_viz_mutations import render_viz
+except Exception as e:  # noqa: BLE001 — older workbench without the lib entry
+    print(f"render: skipped (render_viz unavailable: {e})")
+    sys.exit(0)
+studies = ws / "workspace" / "studies"
+if studies.is_dir():
+    for d in sorted(p for p in studies.iterdir() if (p / "study.yaml").is_file()):
+        if not (d / "runs.db").is_file():
+            continue
+        try:
+            body, status = render_viz(ws, {"name": d.name})
+            n = len(body.get("viz_paths") or []) if isinstance(body, dict) else 0
+            print(f"render: {d.name} -> {status} ({n} figure(s))")
+        except Exception as e:  # noqa: BLE001 — never block the publish on one figure
+            print(f"render: {d.name} -> error, skipped: {e}")
+PY
+
 # The workspace's own package must be importable for build_core() registration.
 PYTHONPATH="$WS_ROOT${PYTHONPATH:+:$PYTHONPATH}" \
   vivarium-workbench-publish "${args[@]}"
