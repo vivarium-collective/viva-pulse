@@ -123,7 +123,7 @@ doc = pulse_hemorrhage(core, patient_file="my_patients/Athlete.json", severity=0
 - The cache is keyed by the patient file's contents, the Pulse install (version, git hash, a digest of the `PyPulse` binary and a digest of the data files Pulse reads at initialization) and the engine type. Editing the patient file, changing Pulse's code or its data files makes a new state.
 - The cache lives in `$VIVA_PULSE_CACHE_DIR` if set, otherwise in the user cache directory (`platformdirs.user_cache_path("viva-pulse")/states`, e.g. `~/Library/Caches/viva-pulse/states` on macOS). Deleting it is always safe.
 - A run from the cache matches an engine stabilized directly from the same patient to within 1e-6 relative after 30 s. It is not bit-identical, because the state round-trips through JSON.
-- `patient_file` defaults to `StandardMale.json`, and bigraph-schema treats a value equal to the default as unset, so `patient_file="StandardMale.json"` uses `state_file`. StandardMale ships a state anyway.
+- `patient_file` defaults to `StandardMale.json`, and a value equal to the default can't be told from an unset one, so `patient_file="StandardMale.json"` uses `state_file`. StandardMale ships a state anyway.
 
 ### Circuit modifiers
 

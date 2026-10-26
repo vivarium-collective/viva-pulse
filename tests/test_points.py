@@ -189,6 +189,8 @@ def test_a_name_collision_with_the_state_raises(kind, entry, config, message):
     bin_dir = ensure_pulse_importable()
     state = json.loads((bin_dir / "states" / STATE).read_text())
     state["CompartmentManager"][kind].append(entry)
+    # The config a process passes: every declared key, as bigraph-schema fills it.
+    config = PulseCircuitProcess({"modules": ["cardiovascular_points"], **config}, core=build_core()).config
     with pytest.raises(ValueError, match=message):
         CARDIOVASCULAR_POINTS.prepare_state(config, state)
 

@@ -71,8 +71,8 @@ with `model_type: whole_body`, and on every composite that takes `state_file`. L
 - A run from the cache matches an engine stabilized directly from the same patient to within
   1e-6 relative after 30 s. It is not bit-identical, because the state round-trips through
   JSON.
-- `patient_file` defaults to `StandardMale.json`. bigraph-schema treats a value equal to the
-  default as unset, so `patient_file="StandardMale.json"` uses `state_file`; StandardMale
+- `patient_file` defaults to `StandardMale.json`. A value equal to the default can't be told
+  from an unset one, so `patient_file="StandardMale.json"` uses `state_file`; StandardMale
   ships a state anyway.
 
 ## Circuit modifiers

@@ -87,9 +87,9 @@ def _load_state(install_dir: str, model_type: str, state: dict[str, Any], reques
 def _check_whole_body_start(config: dict, schema: dict) -> None:
     """A whole-body engine starts from ``state_file`` or from ``patient_file``, not both.
 
-    bigraph-schema replaces an explicit value equal to the default with the
-    default, so only a non-default value counts as set. The default patient,
-    StandardMale, ships a state anyway.
+    A process can't tell an explicit default from an omitted one, so only a
+    non-default value counts as set. The default patient, StandardMale, ships a
+    state anyway.
     """
     if all(config[key] != schema[key]["_default"] for key in ("state_file", "patient_file")):
         raise ValueError(f"state_file {config['state_file']!r} and patient_file "
@@ -624,9 +624,8 @@ class PulseCircuitProcess(Process):
         first breath completes. This settling plays the role that Pulse's
         stabilization plays for WholeBody state files. It runs before t = 0, in
         1 s steps, for at most ``max_settle_s``. A request still NaN after that
-        is unserved, and ``_pull`` reports it. bigraph-schema replaces an
-        explicit ``max_settle_s`` of 0.0 with the default, so settling cannot
-        be switched off.
+        is unserved, and ``_pull`` reports it, so ``max_settle_s`` 0.0 (no
+        settling) fails the load while any request is still NaN.
         """
         settled = 0.0
         while settled < self.config["max_settle_s"]:

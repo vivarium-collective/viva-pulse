@@ -142,8 +142,8 @@ def test_process_rejects_invalid_config(config, match):
 
 
 def test_modules_override_replaces_the_default_list():
-    """Falsifies: bigraph-schema merges a list override into a non-empty default,
-    selecting modules the caller never asked for."""
+    """Falsifies: the modules override doesn't reach the process config as given (exactly
+    the modules named, nothing added)."""
     process = PulseCircuitProcess({"modules": ["cardiovascular"]}, core=build_core())
     assert process.config["modules"] == ["cardiovascular"]
 
