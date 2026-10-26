@@ -15,10 +15,13 @@ question: 'Does the same right-leg hemorrhage (severity 0.8, 10 minutes) produce
   does the fraction of blood lost depend on the patient''s starting blood volume?
 
   '
-hypothesis: 'Every patient loses blood volume, raises heart rate and loses arterial pressure. Absolute blood loss varies much less than starting blood volume does, so patients with a smaller starting blood volume lose a larger fraction of it.
+hypothesis: 'Every patient loses blood volume, raises heart rate and loses arterial
+  pressure. Absolute blood loss varies much less than starting blood volume does,
+  so patients with a smaller starting blood volume lose a larger fraction of it.
 
   '
-objective: 'Run pulse_hemorrhage (RightLeg, severity 0.8, 600 s) once from each of the 21
+objective: 'Run pulse_hemorrhage (RightLeg, severity 0.8, 600 s) once from each of
+  the 21
 
   stabilized states in Pulse''s install (bin/states/*@0s.json) and compare the
 
@@ -255,10 +258,17 @@ preregistered:
   - tests/test_cohort.py::test_every_patient_bleeds_and_compensates
   - tests/test_cohort.py::test_smaller_patients_lose_a_larger_fraction
   predictions:
-  - 'Pilot probe (direct pulse_hemorrhage runs, 600 s): all 21 states load; fraction lost ranges 23.8% (Overweight) to 38.1% (Underweight); Spearman rank correlation of fraction lost with starting blood volume is -0.91.'
-  thresholds_provenance: The -0.7 correlation threshold is set below that pilot value; the qualitative criteria follow from the hypothesis.
-  pilot: Criteria were written after a direct pilot of the same 21 configurations (workspace/experiments/_runs.yaml, pilot-2026-10-23-patients), which gave Spearman rho = -0.91. Pulse is deterministic, so these criteria are regression checks on the canonical runs, not out-of-sample predictions.
-falsifiability: 'Refuted if any patient fails to load or run, if any patient''s blood volume,
+  - 'Pilot probe (direct pulse_hemorrhage runs, 600 s): all 21 states load; fraction
+    lost ranges 23.8% (Overweight) to 38.1% (Underweight); Spearman rank correlation
+    of fraction lost with starting blood volume is -0.91.'
+  thresholds_provenance: The -0.7 correlation threshold is set below that pilot value;
+    the qualitative criteria follow from the hypothesis.
+  pilot: Criteria were written after a direct pilot of the same 21 configurations
+    (workspace/experiments/_runs.yaml, pilot-2026-10-23-patients), which gave Spearman
+    rho = -0.91. Pulse is deterministic, so these criteria are regression checks on
+    the canonical runs, not out-of-sample predictions.
+falsifiability: 'Refuted if any patient fails to load or run, if any patient''s blood
+  volume,
 
   heart rate or MAP moves the other way, or if the rank correlation of fraction
 
@@ -268,20 +278,29 @@ falsifiability: 'Refuted if any patient fails to load or run, if any patient''s 
 limitations:
 - The 21 patients are Pulse's shipped examples, not a population sample.
 - The same severity number does not mean the same bleeding rate in every patient.
-- The negative control is established on a cohort member in the sibling study rather than re-run for all 21 patients; a cohort-wide no-bleed sweep is a proposed follow-up.
-- Acceptance rests on the deterministic pilot, not external literature (none was provided), so the bands are regression checks, not a population validation.
+- The negative control is established on a cohort member in the sibling study rather
+  than re-run for all 21 patients; a cohort-wide no-bleed sweep is a proposed follow-up.
+- Acceptance rests on the deterministic pilot, not external literature (none was provided),
+  so the bands are regression checks, not a population validation.
 controls:
 - name: no-bleed
   kind: negative
-  hypothesis: With no hemorrhage a patient loses no blood and vitals stay at their loaded values, confirming the cohort's loss and compensation come from the bleed and not from loading the state.
+  hypothesis: With no hemorrhage a patient loses no blood and vitals stay at their
+    loaded values, confirming the cohort's loss and compensation come from the bleed
+    and not from loading the state.
   expected: Under 1 mL lost; MAP and heart rate within 1 unit of their start.
-  observed: Established on this engine for StandardMale (a cohort member) in the sibling hemorrhage-severity-sweep study, severity-0.0 arm — 0 mL lost, MAP 95.3 -> 95.3, heart rate 72.0 -> 71.2. A cohort-wide no-bleed sweep is a proposed follow-up.
+  observed: "Established on this engine for StandardMale (a cohort member) in the\
+    \ sibling hemorrhage-severity-sweep study, severity-0.0 arm \u2014 0 mL lost,\
+    \ MAP 95.3 -> 95.3, heart rate 72.0 -> 71.2. A cohort-wide no-bleed sweep is a\
+    \ proposed follow-up."
   result: PASS
 - name: ExtremeFemale
   kind: positive
-  hypothesis: The smallest-volume patient, the extreme of the predictor, shows the bleed-and-compensate response and sits at the high-fraction end of the trend.
+  hypothesis: The smallest-volume patient, the extreme of the predictor, shows the
+    bleed-and-compensate response and sits at the high-fraction end of the trend.
   expected: A clear bleed with compensation, and one of the largest fractions lost.
-  observed: 1094 mL lost on a 2915 mL starting volume (~37.5%), near the top of the fraction range; blood volume and MAP fell and heart rate rose.
+  observed: 1094 mL lost on a 2915 mL starting volume (~37.5%), near the top of the
+    fraction range; blood volume and MAP fell and heart rate rose.
   result: PASS
 runs:
 - name: viva_pulse.composites.hemorrhage.pulse_hemorrhage__1792749278__df9c1d
@@ -290,7 +309,8 @@ runs:
   emitter:
     kind: unknown
   env_id: 73e98bb8f7456b7e
-  params: '{"state_file": "StandardMale@0s.json", "compartment": "RightLeg", "severity": 0.8}'
+  params: '{"state_file": "StandardMale@0s.json", "compartment": "RightLeg", "severity":
+    0.8}'
   computed_outcomes:
     _status: store_unresolved
   provenance:
@@ -315,7 +335,8 @@ runs:
   emitter:
     kind: unknown
   env_id: 73e98bb8f7456b7e
-  params: '{"state_file": "Bradycardic@0s.json", "compartment": "RightLeg", "severity": 0.8}'
+  params: '{"state_file": "Bradycardic@0s.json", "compartment": "RightLeg", "severity":
+    0.8}'
   computed_outcomes:
     _status: store_unresolved
   provenance:
@@ -340,7 +361,8 @@ runs:
   emitter:
     kind: unknown
   env_id: 73e98bb8f7456b7e
-  params: '{"state_file": "Carol@0s.json", "compartment": "RightLeg", "severity": 0.8}'
+  params: '{"state_file": "Carol@0s.json", "compartment": "RightLeg", "severity":
+    0.8}'
   computed_outcomes:
     _status: store_unresolved
   provenance:
@@ -365,7 +387,8 @@ runs:
   emitter:
     kind: unknown
   env_id: 73e98bb8f7456b7e
-  params: '{"state_file": "Cynthia@0s.json", "compartment": "RightLeg", "severity": 0.8}'
+  params: '{"state_file": "Cynthia@0s.json", "compartment": "RightLeg", "severity":
+    0.8}'
   computed_outcomes:
     _status: store_unresolved
   provenance:
@@ -390,7 +413,8 @@ runs:
   emitter:
     kind: unknown
   env_id: 73e98bb8f7456b7e
-  params: '{"state_file": "DefaultFemale@0s.json", "compartment": "RightLeg", "severity": 0.8}'
+  params: '{"state_file": "DefaultFemale@0s.json", "compartment": "RightLeg", "severity":
+    0.8}'
   computed_outcomes:
     _status: store_unresolved
   provenance:
@@ -415,7 +439,8 @@ runs:
   emitter:
     kind: unknown
   env_id: 73e98bb8f7456b7e
-  params: '{"state_file": "DefaultMale@0s.json", "compartment": "RightLeg", "severity": 0.8}'
+  params: '{"state_file": "DefaultMale@0s.json", "compartment": "RightLeg", "severity":
+    0.8}'
   computed_outcomes:
     _status: store_unresolved
   provenance:
@@ -440,7 +465,8 @@ runs:
   emitter:
     kind: unknown
   env_id: 73e98bb8f7456b7e
-  params: '{"state_file": "ExtremeFemale@0s.json", "compartment": "RightLeg", "severity": 0.8}'
+  params: '{"state_file": "ExtremeFemale@0s.json", "compartment": "RightLeg", "severity":
+    0.8}'
   computed_outcomes:
     _status: store_unresolved
   provenance:
@@ -465,7 +491,8 @@ runs:
   emitter:
     kind: unknown
   env_id: 73e98bb8f7456b7e
-  params: '{"state_file": "ExtremeMale@0s.json", "compartment": "RightLeg", "severity": 0.8}'
+  params: '{"state_file": "ExtremeMale@0s.json", "compartment": "RightLeg", "severity":
+    0.8}'
   computed_outcomes:
     _status: store_unresolved
   provenance:
@@ -515,7 +542,8 @@ runs:
   emitter:
     kind: unknown
   env_id: 73e98bb8f7456b7e
-  params: '{"state_file": "Hassan@0s.json", "compartment": "RightLeg", "severity": 0.8}'
+  params: '{"state_file": "Hassan@0s.json", "compartment": "RightLeg", "severity":
+    0.8}'
   computed_outcomes:
     _status: store_unresolved
   provenance:
@@ -615,7 +643,8 @@ runs:
   emitter:
     kind: unknown
   env_id: 73e98bb8f7456b7e
-  params: '{"state_file": "Nathan@0s.json", "compartment": "RightLeg", "severity": 0.8}'
+  params: '{"state_file": "Nathan@0s.json", "compartment": "RightLeg", "severity":
+    0.8}'
   computed_outcomes:
     _status: store_unresolved
   provenance:
@@ -640,7 +669,8 @@ runs:
   emitter:
     kind: unknown
   env_id: 73e98bb8f7456b7e
-  params: '{"state_file": "Overweight@0s.json", "compartment": "RightLeg", "severity": 0.8}'
+  params: '{"state_file": "Overweight@0s.json", "compartment": "RightLeg", "severity":
+    0.8}'
   computed_outcomes:
     _status: store_unresolved
   provenance:
@@ -690,7 +720,8 @@ runs:
   emitter:
     kind: unknown
   env_id: 73e98bb8f7456b7e
-  params: '{"state_file": "Soldier@0s.json", "compartment": "RightLeg", "severity": 0.8}'
+  params: '{"state_file": "Soldier@0s.json", "compartment": "RightLeg", "severity":
+    0.8}'
   computed_outcomes:
     _status: store_unresolved
   provenance:
@@ -715,7 +746,8 @@ runs:
   emitter:
     kind: unknown
   env_id: 73e98bb8f7456b7e
-  params: '{"state_file": "StandardFemale@0s.json", "compartment": "RightLeg", "severity": 0.8}'
+  params: '{"state_file": "StandardFemale@0s.json", "compartment": "RightLeg", "severity":
+    0.8}'
   computed_outcomes:
     _status: store_unresolved
   provenance:
@@ -740,7 +772,8 @@ runs:
   emitter:
     kind: unknown
   env_id: 73e98bb8f7456b7e
-  params: '{"state_file": "Tachycardic@0s.json", "compartment": "RightLeg", "severity": 0.8}'
+  params: '{"state_file": "Tachycardic@0s.json", "compartment": "RightLeg", "severity":
+    0.8}'
   computed_outcomes:
     _status: store_unresolved
   provenance:
@@ -765,7 +798,8 @@ runs:
   emitter:
     kind: unknown
   env_id: 73e98bb8f7456b7e
-  params: '{"state_file": "Underweight@0s.json", "compartment": "RightLeg", "severity": 0.8}'
+  params: '{"state_file": "Underweight@0s.json", "compartment": "RightLeg", "severity":
+    0.8}'
   computed_outcomes:
     _status: store_unresolved
   provenance:
@@ -790,7 +824,8 @@ runs:
   emitter:
     kind: unknown
   env_id: 73e98bb8f7456b7e
-  params: '{"state_file": "Ventilated@0s.json", "compartment": "RightLeg", "severity": 0.8}'
+  params: '{"state_file": "Ventilated@0s.json", "compartment": "RightLeg", "severity":
+    0.8}'
   computed_outcomes:
     _status: store_unresolved
   provenance:
@@ -815,7 +850,8 @@ runs:
   emitter:
     kind: unknown
   env_id: b0b1fa2138c7b171
-  params: '{"state_file": "StandardMale@0s.json", "compartment": "RightLeg", "severity": 0.8}'
+  params: '{"state_file": "StandardMale@0s.json", "compartment": "RightLeg", "severity":
+    0.8}'
   computed_outcomes:
     _status: store_unresolved
   provenance:
@@ -1160,7 +1196,8 @@ runs:
   emitter:
     kind: unknown
   env_id: b0b1fa2138c7b171
-  params: '{"state_file": "StandardMale@0s.json", "compartment": "RightLeg", "severity": 0.8}'
+  params: '{"state_file": "StandardMale@0s.json", "compartment": "RightLeg", "severity":
+    0.8}'
   computed_outcomes:
     _status: store_unresolved
   provenance:
@@ -1726,57 +1763,75 @@ pipeline_gate:
     evaluated_by: code
     diverges_from_authored: true
 last_test_run:
-  timestamp: '2026-10-23T10:25:21+00:00'
+  timestamp: '2026-10-26T20:21:14+00:00'
   passed: 23
   failed: 0
   skipped: 0
-  duration_s: 0.46565699577331543
-claim: 'All 21 shipped patients bleed and compensate the same way, and the fraction of blood lost falls with starting blood volume (Spearman rho = -0.89).
+  duration_s: 0.6340150833129883
+claim: 'All 21 shipped patients bleed and compensate the same way, and the fraction
+  of blood lost falls with starting blood volume (Spearman rho = -0.89).
 
   '
 confidence: Accepted
 findings:
 - id: F-01
   tier: observation
-  statement: In every patient blood volume and MAP fell and heart rate rose. MAP fell by 3.8 mmHg (Bradycardic) to 32.2 mmHg (Joel); heart rate rose by 21.5 (Bradycardic) to 48.9 per min (Rick). No patient reached an irreversible state.
+  statement: In every patient blood volume and MAP fell and heart rate rose. MAP fell
+    by 3.8 mmHg (Bradycardic) to 32.2 mmHg (Joel); heart rate rose by 21.5 (Bradycardic)
+    to 48.9 per min (Rick). No patient reached an irreversible state.
   evidence:
     study_tests:
     - tests/test_cohort.py::test_every_patient_bleeds_and_compensates
-    runs: 'canonical runs: investigation run of 2026-10-23 at commit 5754940 (runs.db)'
+    runs: 'canonical runs: investigation run of 2026-10-25 at commit b4332d6 (runs.db)'
 - id: F-02
   tier: observation
-  statement: Absolute loss ranged from 1094 mL (ExtremeFemale) to 1755 mL (ExtremeMale), a much narrower spread than starting blood volume (2915 to 7095 mL), so the fraction lost ranged from 23.7% (Overweight) to 37.8% (Underweight); its Spearman rank correlation with starting blood volume is -0.89.
+  statement: Absolute loss ranged from 1094 mL (ExtremeFemale) to 1755 mL (ExtremeMale),
+    a much narrower spread than starting blood volume (2915 to 7095 mL), so the fraction
+    lost ranged from 23.7% (Overweight) to 37.8% (Underweight); its Spearman rank
+    correlation with starting blood volume is -0.89.
   evidence:
     study_tests:
     - tests/test_cohort.py::test_smaller_patients_lose_a_larger_fraction
-    runs: 'canonical runs: investigation run of 2026-10-23 at commit 5754940 (runs.db)'
+    runs: 'canonical runs: investigation run of 2026-10-25 at commit b4332d6 (runs.db)'
 - id: F-03
   tier: mechanism
   mechanism_origin: emergent
-  statement: The fraction-volume trend follows from a shared compensation, not from different responses per patient. Every patient runs Pulse's same baroreflex (F-01), and the absolute loss is much less variable (1094-1755 mL) than the starting volume (2915-7095 mL); because a similar absolute loss is taken from very different reserves, the fraction lost falls as starting volume rises (rho = -0.89). The uniform mechanism, not patient-specific physiology, produces the correlation.
+  statement: The fraction-volume trend follows from a shared compensation, not from
+    different responses per patient. Every patient runs Pulse's same baroreflex (F-01),
+    and the absolute loss is much less variable (1094-1755 mL) than the starting volume
+    (2915-7095 mL); because a similar absolute loss is taken from very different reserves,
+    the fraction lost falls as starting volume rises (rho = -0.89). The uniform mechanism,
+    not patient-specific physiology, produces the correlation.
   evidence:
     study_tests:
     - tests/test_cohort.py::test_every_patient_bleeds_and_compensates
     - tests/test_cohort.py::test_smaller_patients_lose_a_larger_fraction
-    runs: 'canonical runs: investigation run of 2026-10-23 at commit 5754940 (runs.db)'
+    runs: 'canonical runs: investigation run of 2026-10-25 at commit b4332d6 (runs.db)'
 alternative_hypotheses:
 - hypothesis: The fraction-volume correlation is driven by one or two outlier patients.
   status: excluded
-  evidence: The correlation is Spearman (rank-based) over all 21 patients, rho = -0.89, which is not set by a single extreme value.
+  evidence: The correlation is Spearman (rank-based) over all 21 patients, rho = -0.89,
+    which is not set by a single extreme value.
 - hypothesis: Larger patients lose a larger fraction, or there is no relationship.
   status: excluded
-  evidence: The rank correlation is strongly negative (-0.89); smaller patients lose the larger fraction (F-02).
+  evidence: The rank correlation is strongly negative (-0.89); smaller patients lose
+    the larger fraction (F-02).
 - hypothesis: Some patients do not compensate (a qualitatively different response).
   status: excluded
-  evidence: F-01 — all 21 patients bled, lost volume and raised heart rate, and none reached an irreversible state.
+  evidence: "F-01 \u2014 all 21 patients bled, lost volume and raised heart rate,\
+    \ and none reached an irreversible state."
 discovery_implications:
-  resolved: Across Pulse's 21 shipped patients the bleed-and-compensate response is qualitatively uniform, and the fraction lost falls with starting blood volume.
-  remaining: Whether this holds for a real population rather than Pulse's shipped examples, and whether one severity means the same bleeding rate across body sizes.
+  resolved: Across Pulse's 21 shipped patients the bleed-and-compensate response is
+    qualitatively uniform, and the fraction lost falls with starting blood volume.
+  remaining: Whether this holds for a real population rather than Pulse's shipped
+    examples, and whether one severity means the same bleeding rate across body sizes.
   followup_study_proposals:
   - title: cohort-no-bleed-control
-    motivation: Run the no-bleed arm for all 21 patients so the negative control is cohort-wide rather than borrowed from the StandardMale sibling run.
+    motivation: Run the no-bleed arm for all 21 patients so the negative control is
+      cohort-wide rather than borrowed from the StandardMale sibling run.
   - title: severity-calibrated-to-flow
-    motivation: Map Pulse severity to a per-patient flow rate so equal severity means equal bleeding rate, isolating body size from bleed rate.
+    motivation: Map Pulse severity to a per-patient flow rate so equal severity means
+      equal bleeding rate, isolating body size from bleed rate.
 conclusion: '## Claims
 
   The hypothesis holds (23/23 tests passed).
@@ -1784,6 +1839,7 @@ conclusion: '## Claims
 
   ## Limitations
 
-  The shipped patients are examples, not a population, and the same severity is not the same bleeding rate in every patient.
+  The shipped patients are examples, not a population, and the same severity is not
+  the same bleeding rate in every patient.
 
   '
