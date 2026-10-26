@@ -184,7 +184,7 @@ def test_generators_validate_parameters_when_building(generator, params, match):
 @pytest.mark.parametrize("model_type", ENGINES)
 def test_store_tracks_pulse(model_type):
     """Falsifies: the patient-initialized load path (VentilationMechanics), the gas-
-    compartment requests, or the delta accounting is wrong. Stores after 20 one-second
+    compartment requests, or the store mapping is wrong. Stores after 20 one-second
     updates must equal an independent engine at the same engine time."""
     sim, rows = _run(pulse_respiratory, 20, model_type=model_type)
     # Pulse accumulates engine time as a float (e.g. 25.9999999999995 s); advancing an

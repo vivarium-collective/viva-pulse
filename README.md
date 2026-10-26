@@ -108,9 +108,9 @@ All use `fidelity="real-bridge"`. Each circuit is described in detail under [Pul
 - **`PulseProcess`**:
   - Loads a stabilized Pulse state (`state_file`, or any patient through `patient_file`) and advances the engine by `interval` seconds per update.
   - Inputs `hemorrhage_severity` and `iv_rate_mL_per_min` are setpoints, sent to Pulse as actions only when they change.
-  - Outputs are nine vital signs plus an `irreversible_state` flag. Vitals are `float` ports carrying deltas, seeded with the loaded readings, so each store always equals Pulse's own value. The reason for this design is in `.build-progress.md`.
+  - Outputs are nine vital signs plus an `irreversible_state` flag. Vitals are `overwrite[float]` ports carrying Pulse's current reading, seeded with the loaded readings, so each store always equals Pulse's own value.
 - **`PulseCircuitProcess`**: one real Pulse engine exposing the circuit modules named in `config.modules` (see `viva_pulse/circuits/`).
-  - Each module's readings are a nested subtree of `float` delta ports. For example, `cardiovascular/central/aorta/pressure_mmHg` is wired to `circuits/cardiovascular/...`.
+  - Each module's readings are a nested subtree of `overwrite[float]` ports. For example, `cardiovascular/central/aorta/pressure_mmHg` is wired to `circuits/cardiovascular/...`.
   - Its setpoints sit under the `setpoints` input port and are wired to `interventions/<module>/...`. Each defaults to its baseline (multipliers 1.0, hemorrhage 0.0) and is sent to Pulse only when it changes.
   - Identical requests from several modules share one Pulse request. A request Pulse cannot serve fails the load, or the update where it appears, instead of emitting NaN.
   - `model_type` selects the engine: `whole_body`, or `ventilation_mechanics`, which has the airway only (no blood or chemoreflex). Each module declares which engines it supports; `thermal`, `supplemental_oxygen` and the two `*_points` modules run on `whole_body` only.

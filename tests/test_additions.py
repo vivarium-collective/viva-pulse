@@ -59,23 +59,14 @@ def _oracle(link):
     return dict(zip(HEMODYNAMICS, engine.pull_data()[1:]))
 
 
-def _accumulate(store, deltas):
-    for key, delta in deltas.items():
-        if isinstance(delta, dict):
-            _accumulate(store[key], delta)
-        elif not isinstance(delta, bool):
-            store[key] += delta
-
-
 def _run_circuit(**config):
     process = PulseCircuitProcess({"modules": ["cardiovascular", "cardiovascular_points"],
                                    "cardiovascular_point_nodes": ["Aorta1"],
                                    "cardiovascular_point_paths": ["VivaAddedShunt"], **config}, core=build_core())
-    state = process.initial_state()
     setpoints = {"cardiovascular": {port: default for binding in MODULES["cardiovascular"].bindings
                                     for port, default in binding.ports.items()}}
     for _ in range(SECONDS):
-        _accumulate(state, process.update({"setpoints": setpoints}, 1.0))
+        state = process.update({"setpoints": setpoints}, 1.0)
     return state
 
 
@@ -105,11 +96,8 @@ def test_the_shunt_carries_flow_and_is_point_readable(shunted):
 def test_pulse_process_runs_the_shunt(shunted):
     """Falsifies: PulseProcess drops circuit_additions."""
     process = PulseProcess({"circuit_additions": SHUNT}, core=build_core())
-    vitals = process.initial_state()
     for _ in range(SECONDS):
-        for name, delta in process.update({"hemorrhage_severity": 0.0, "iv_rate_mL_per_min": 0.0}, 1.0).items():
-            if name != "irreversible_state":
-                vitals[name] += delta
+        vitals = process.update({"hemorrhage_severity": 0.0, "iv_rate_mL_per_min": 0.0}, 1.0)
     assert vitals["heart_rate_bpm"] == pytest.approx(
         shunted["cardiovascular"]["hemodynamics"]["heart_rate_bpm"], rel=1e-9)
 
@@ -167,12 +155,11 @@ def test_a_name_pulse_creates_at_run_time_cannot_take_over_the_link():
     def heart_rate(key):
         process = PulseCircuitProcess({"modules": ["cardiovascular"], "hemorrhage_compartment": "Aorta",
                                        "circuit_additions": {key: SHUNT["Shunt"]}}, core=build_core())
-        state = process.initial_state()
         setpoints = {"cardiovascular": {**{port: default for binding in MODULES["cardiovascular"].bindings
                                            for port, default in binding.ports.items()},
                                         "hemorrhage_severity": 0.5}}
         for _ in range(SECONDS):
-            _accumulate(state, process.update({"setpoints": setpoints}, 1.0))
+            state = process.update({"setpoints": setpoints}, 1.0)
         return state["cardiovascular"]["hemodynamics"]["heart_rate_bpm"]
 
     assert heart_rate("AortaHemorrhage") == heart_rate("Shunt")

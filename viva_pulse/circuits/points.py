@@ -52,8 +52,8 @@ def _readable(node: dict[str, Any], prop: str) -> bool:
 
     Pulse leaves an invalid property out of the state: a non-compliant node has no
     Volume, and a request for it reads NaN. A reservoir node (``Ambient``) holds an
-    infinite volume, which proto3 JSON writes as ``"Infinity"``; carried as deltas it
-    would turn NaN (inf - inf) after the first update.
+    infinite volume, which proto3 JSON writes as ``"Infinity"``; it never changes and is
+    not a finite reading, so it is left out too.
     """
     if prop not in node:
         return False
