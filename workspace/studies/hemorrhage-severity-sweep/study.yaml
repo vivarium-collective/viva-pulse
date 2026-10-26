@@ -22,7 +22,8 @@ hypothesis: 'Blood lost and heart rate rise monotonically with severity, while m
   bleed is severe enough to outrun that compensation.
 
   '
-objective: 'Run pulse_hemorrhage for 600 s at severity 0.0, 0.2, 0.4, 0.6, 0.8 and 1.0
+objective: 'Run pulse_hemorrhage for 600 s at severity 0.0, 0.2, 0.4, 0.6, 0.8 and
+  1.0
 
   (RightLeg, StandardMale) and compare the final vitals across the grid.
 
@@ -88,7 +89,8 @@ readouts:
   status: available
 - name: hemorrhage-severity
   store_path: interventions.hemorrhage_severity
-  description: Severity setpoint applied to the engine (recorded so figures read it from the run).
+  description: Severity setpoint applied to the engine (recorded so figures read it
+    from the run).
   status: available
 units_and_time:
 - quantity: time
@@ -117,7 +119,8 @@ expected_behavior:
   test: tests/test_severity.py::test_blood_loss_rises_with_severity
 - name: pressure-held-until-severe
   observable: vitals.mean_arterial_pressure_mmHg
-  condition: within 2 mmHg of start at severity 0.2 and 0.4; at least 8 mmHg below start at 0.8
+  condition: every sample within 2 mmHg of start at severity 0.2 and 0.4; at least
+    8 mmHg below start at 0.8
   test: tests/test_severity.py::test_pressure_held_for_mild_bleeds, test_pressure_falls_for_severe_bleeds
 visualizations:
 - name: severity-response
@@ -132,17 +135,20 @@ visualizations:
 robustness:
   n_replicates: 1
   parameter_sweep: true
-  note: Pulse is deterministic; the severity-0.8 pilot reproduced the earlier reference run to 4 significant figures.
+  note: Pulse is deterministic; the severity-0.8 pilot reproduced the earlier reference
+    run to 4 significant figures.
 controls:
 - name: severity-0.0
   kind: negative
   hypothesis: With no bleed nothing is lost and the vitals stay at their loaded values.
-  expected: Less than 1 mL hemorrhaged; MAP and heart rate within 1 unit of their starting values.
+  expected: Less than 1 mL hemorrhaged; MAP and heart rate within 1 unit of their
+    starting values.
   observed: 0 mL lost; MAP 95.3 -> 95.3 mmHg; heart rate 72.0 -> 71.2 /min.
   result: PASS
 - name: severity-1.0
   kind: positive
-  hypothesis: A maximal bleed produces the largest, unambiguous loss and the deepest pressure fall, confirming the readout responds when the effect is certainly present.
+  hypothesis: A maximal bleed produces the largest, unambiguous loss and the deepest
+    pressure fall, confirming the readout responds when the effect is certainly present.
   expected: The largest hemorrhaged volume of the sweep and the lowest MAP.
   observed: 1793 mL lost (most of any arm); MAP 95.3 -> 78.1 mmHg (largest fall).
   result: PASS
@@ -156,10 +162,20 @@ preregistered:
   - tests/test_severity.py::test_pressure_falls_for_severe_bleeds
   - tests/test_severity.py::test_reproduces_reference_run
   predictions:
-  - 'Pilot probe (direct pulse_hemorrhage runs, 600 s): severity 0.2 / 0.5 / 0.8 lost 386 / 1040 / 1577 mL; heart rate 76 / 95 / 107 bpm; MAP 95.0 / 94.8 / 84.1 mmHg from 95.3.'
-  thresholds_provenance: Thresholds come from that pilot probe and from the reference run in .build-progress.md (RightLeg 0.8, 600 s, BV 3936 mL, MAP 84.1 mmHg).
-  pilot: Criteria were written after a direct pilot (workspace/experiments/_runs.yaml, pilot-2026-10-23-severity) at severity 0.2, 0.5 and 0.8. Pulse is deterministic, so the criteria at 0.2 and 0.8 were set knowing those outcomes; severity 0.0, 0.4, 0.6 and 1.0 were not run before the canonical runs.
-falsifiability: 'The hypothesis is refuted if blood loss or heart rate fails to increase with
+  - 'Pilot probe (direct pulse_hemorrhage runs, 600 s): severity 0.2 / 0.5 / 0.8 lost
+    386 / 1040 / 1577 mL; heart rate 76 / 95 / 107 bpm; MAP 95.0 / 94.8 / 84.1 mmHg
+    from 95.3.'
+  thresholds_provenance: Thresholds come from that pilot probe and from the reference
+    run in .build-progress.md (RightLeg 0.8, 600 s, BV 3936 mL, MAP 84.1 mmHg).
+  pilot: Criteria were written after a direct pilot (workspace/experiments/_runs.yaml,
+    pilot-2026-10-23-severity) at severity 0.2, 0.5 and 0.8. Pulse is deterministic,
+    so the criteria at 0.2 and 0.8 were set knowing those outcomes; severity 0.0,
+    0.4, 0.6 and 1.0 were not run before the canonical runs. On 2026-10-26 the mild-bleed
+    criterion was tightened from the final sample to every 1 s sample, and a check
+    that severity 0.6 leaves the band was added; both were written after the canonical
+    runs, so they are regression checks, not predictions.
+falsifiability: 'The hypothesis is refuted if blood loss or heart rate fails to increase
+  with
 
   severity, if MAP drops more than 2 mmHg at severity 0.2 or 0.4, or if MAP at
 
@@ -167,27 +183,43 @@ falsifiability: 'The hypothesis is refuted if blood loss or heart rate fails to 
 
   '
 limitations:
-- One patient (StandardMale), one site (RightLeg) and 10 minutes; longer bleeds and other sites are not covered.
+- One patient (StandardMale), one site (RightLeg) and 10 minutes; longer bleeds and
+  other sites are not covered.
 - Severity is Pulse's own dimensionless scale, not a calibrated flow rate.
-- Acceptance bands trace to the deterministic pilot and the .build-progress.md reference run, not to external physiology literature (none was provided), so they are regression checks on Pulse's behaviour, not a validation against data.
+- Acceptance bands trace to the deterministic pilot and the .build-progress.md reference
+  run, not to external physiology literature (none was provided), so they are regression
+  checks on Pulse's behaviour, not a validation against data.
 alternative_hypotheses:
-- hypothesis: MAP is held at low severity only because less blood is lost, not by active compensation.
+- hypothesis: MAP is held at low severity only because less blood is lost, not by
+    active compensation.
   status: excluded
-  evidence: Blood loss rises monotonically with severity (F-01) while MAP is still held flat through severity 0.4; the pressure is maintained despite increasing loss, so reduced loss cannot be the explanation.
+  evidence: Blood loss rises monotonically with severity (F-01) while MAP is still
+    held flat through severity 0.4; the pressure is maintained despite increasing
+    loss, so reduced loss cannot be the explanation.
 - hypothesis: The heart-rate rise is incidental and does not defend pressure.
   status: excluded
-  evidence: MAP stays within 1.1 mmHg of start exactly over the range where heart rate climbs and cardiac output is still near baseline, and breaks only once cardiac output falls (F-02, F-04); the tachycardia tracks the pressure defence.
-- hypothesis: The last-step deferral or the fixed 1 s record step distorts the severity-0.8 numbers.
+  evidence: MAP ends within 1.1 mmHg of start, and never strays more than 1.8 mmHg,
+    exactly over the range where heart rate climbs and cardiac output is still near
+    baseline, and breaks only once cardiac output falls (F-02, F-04); the tachycardia
+    tracks the pressure defence.
+- hypothesis: The last-step deferral or the fixed 1 s record step distorts the severity-0.8
+    numbers.
   status: excluded
-  evidence: Severity 0.8 reproduces the independent reference run to 4 significant figures (F-03), so the recording cadence does not move the result.
+  evidence: Severity 0.8 reproduces the independent reference run to 4 significant
+    figures (F-03), so the recording cadence does not move the result.
 discovery_implications:
-  resolved: Over 10 minutes and one site, MAP is defended by baroreflex tachycardia until roughly severity 0.5, then falls as cardiac output drops.
-  remaining: Whether the same threshold holds at other bleed sites, over longer windows where compensation may fatigue, and how Pulse severity maps to a calibrated flow rate.
+  resolved: Over 10 minutes and one site, MAP is defended by baroreflex tachycardia
+    until roughly severity 0.5, then falls as cardiac output drops.
+  remaining: Whether the same threshold holds at other bleed sites, over longer windows
+    where compensation may fatigue, and how Pulse severity maps to a calibrated flow
+    rate.
   followup_study_proposals:
   - title: multi-site-severity
-    motivation: Repeat the sweep at a second compartment (e.g. an arm or the aorta) to test whether the severity-0.5 compensation threshold is site-specific.
+    motivation: Repeat the sweep at a second compartment (e.g. an arm or the aorta)
+      to test whether the severity-0.5 compensation threshold is site-specific.
   - title: long-window-decompensation
-    motivation: Extend the severe arms past 10 minutes to see whether the held pressure at mild severities eventually decompensates.
+    motivation: Extend the severe arms past 10 minutes to see whether the held pressure
+      at mild severities eventually decompensates.
 runs:
 - name: viva_pulse.composites.hemorrhage.pulse_hemorrhage__1792749102__7f862d
   status: completed
@@ -195,7 +227,8 @@ runs:
   emitter:
     kind: unknown
   env_id: 73e98bb8f7456b7e
-  params: '{"state_file": "StandardMale@0s.json", "compartment": "RightLeg", "severity": 0.8}'
+  params: '{"state_file": "StandardMale@0s.json", "compartment": "RightLeg", "severity":
+    0.8}'
   computed_outcomes:
     _status: store_unresolved
   provenance:
@@ -220,7 +253,8 @@ runs:
   emitter:
     kind: unknown
   env_id: 73e98bb8f7456b7e
-  params: '{"state_file": "StandardMale@0s.json", "compartment": "RightLeg", "severity": 0.0}'
+  params: '{"state_file": "StandardMale@0s.json", "compartment": "RightLeg", "severity":
+    0.0}'
   computed_outcomes:
     _status: store_unresolved
   provenance:
@@ -245,7 +279,8 @@ runs:
   emitter:
     kind: unknown
   env_id: 73e98bb8f7456b7e
-  params: '{"state_file": "StandardMale@0s.json", "compartment": "RightLeg", "severity": 0.2}'
+  params: '{"state_file": "StandardMale@0s.json", "compartment": "RightLeg", "severity":
+    0.2}'
   computed_outcomes:
     _status: store_unresolved
   provenance:
@@ -270,7 +305,8 @@ runs:
   emitter:
     kind: unknown
   env_id: 73e98bb8f7456b7e
-  params: '{"state_file": "StandardMale@0s.json", "compartment": "RightLeg", "severity": 0.4}'
+  params: '{"state_file": "StandardMale@0s.json", "compartment": "RightLeg", "severity":
+    0.4}'
   computed_outcomes:
     _status: store_unresolved
   provenance:
@@ -295,7 +331,8 @@ runs:
   emitter:
     kind: unknown
   env_id: 73e98bb8f7456b7e
-  params: '{"state_file": "StandardMale@0s.json", "compartment": "RightLeg", "severity": 0.6}'
+  params: '{"state_file": "StandardMale@0s.json", "compartment": "RightLeg", "severity":
+    0.6}'
   computed_outcomes:
     _status: store_unresolved
   provenance:
@@ -320,7 +357,8 @@ runs:
   emitter:
     kind: unknown
   env_id: 73e98bb8f7456b7e
-  params: '{"state_file": "StandardMale@0s.json", "compartment": "RightLeg", "severity": 1.0}'
+  params: '{"state_file": "StandardMale@0s.json", "compartment": "RightLeg", "severity":
+    1.0}'
   computed_outcomes:
     _status: store_unresolved
   provenance:
@@ -345,7 +383,8 @@ runs:
   emitter:
     kind: unknown
   env_id: b0b1fa2138c7b171
-  params: '{"state_file": "StandardMale@0s.json", "compartment": "RightLeg", "severity": 0.8}'
+  params: '{"state_file": "StandardMale@0s.json", "compartment": "RightLeg", "severity":
+    0.8}'
   computed_outcomes:
     _status: store_unresolved
   provenance:
@@ -450,7 +489,8 @@ runs:
   emitter:
     kind: unknown
   env_id: b0b1fa2138c7b171
-  params: '{"state_file": "StandardMale@0s.json", "compartment": "RightLeg", "severity": 0.8}'
+  params: '{"state_file": "StandardMale@0s.json", "compartment": "RightLeg", "severity":
+    0.8}'
   computed_outcomes:
     _status: store_unresolved
   provenance:
@@ -627,19 +667,23 @@ pipeline_gate:
     evaluated_by: code
     diverges_from_authored: true
 last_test_run:
-  timestamp: '2026-10-23T10:25:20+00:00'
-  passed: 7
+  timestamp: '2026-10-26T20:02:01+00:00'
+  passed: 8
   failed: 0
   skipped: 0
-  duration_s: 0.35389280319213867
-claim: 'Blood loss and heart rate rise steadily with severity, while MAP stays within 1.1 mmHg of its start up to severity 0.4 and falls 7-17 mmHg from severity 0.6 upward.
+  duration_s: 0.39664196968078613
+claim: 'Blood loss and heart rate rise steadily with severity, while MAP ends within
+  1.1 mmHg of its start, and never strays more than 1.8 mmHg, up to severity 0.4 and
+  falls 7-17 mmHg from severity 0.6 upward.
 
   '
 confidence: Accepted
 findings:
 - id: F-01
   tier: observation
-  statement: At 10 min, blood lost was 0 / 386 / 823 / 1241 / 1577 / 1793 mL and heart rate 71.2 / 75.9 / 87.6 / 97.9 / 107.1 / 110.0 per min for severity 0.0 / 0.2 / 0.4 / 0.6 / 0.8 / 1.0.
+  statement: At 10 min, blood lost was 0 / 386 / 823 / 1241 / 1577 / 1793 mL and heart
+    rate 71.2 / 75.9 / 87.6 / 97.9 / 107.1 / 110.0 per min for severity 0.0 / 0.2
+    / 0.4 / 0.6 / 0.8 / 1.0.
   evidence:
     study_tests:
     - tests/test_severity.py::test_blood_loss_rises_with_severity
@@ -647,7 +691,10 @@ findings:
     runs: 'canonical runs: investigation run of 2026-10-23 at commit 5754940 (runs.db)'
 - id: F-02
   tier: observation
-  statement: MAP ended at 95.0 and 94.2 mmHg for severity 0.2 and 0.4 (start 95.3), but at 87.9, 84.1 and 78.1 mmHg for severity 0.6, 0.8 and 1.0. Cardiac output at 10 min fell across severities (5.75 L/min with no bleed to 3.95 at severity 1.0), so the heart-rate rise holds pressure only for the milder bleeds.
+  statement: MAP ended at 95.0 and 94.2 mmHg for severity 0.2 and 0.4 (start 95.3),
+    but at 87.9, 84.1 and 78.1 mmHg for severity 0.6, 0.8 and 1.0. Cardiac output
+    at 10 min fell across severities (5.75 L/min with no bleed to 3.95 at severity
+    1.0), so the heart-rate rise holds pressure only for the milder bleeds.
   evidence:
     study_tests:
     - tests/test_severity.py::test_pressure_held_for_mild_bleeds
@@ -655,7 +702,8 @@ findings:
     runs: 'canonical runs: investigation run of 2026-10-23 at commit 5754940 (runs.db)'
 - id: F-03
   tier: observation
-  statement: Severity 0.8 reproduces the earlier reference run (blood volume 3936 mL, MAP 84.1 mmHg); no run reached an irreversible state within 10 min.
+  statement: Severity 0.8 reproduces the earlier reference run (blood volume 3936
+    mL, MAP 84.1 mmHg); no run reached an irreversible state within 10 min.
   evidence:
     study_tests:
     - tests/test_severity.py::test_reproduces_reference_run
@@ -663,7 +711,11 @@ findings:
 - id: F-04
   tier: mechanism
   mechanism_origin: emergent
-  statement: Pressure is defended by baroreflex tachycardia, not by reduced loss. Heart rate rises monotonically with severity (71 -> 110 /min) while cardiac output still falls (5.75 -> 3.95 L/min); MAP is held only while the tachycardia offsets the volume loss and breaks once the bleed outruns it (severity >= 0.6). The compensation is Pulse's own cardiovascular reflex, not an imposed term.
+  statement: Pressure is defended by baroreflex tachycardia, not by reduced loss.
+    Heart rate rises monotonically with severity (71 -> 110 /min) while cardiac output
+    still falls (5.75 -> 3.95 L/min); MAP is held only while the tachycardia offsets
+    the volume loss and breaks once the bleed outruns it (severity >= 0.6). The compensation
+    is Pulse's own cardiovascular reflex, not an imposed term.
   evidence:
     study_tests:
     - tests/test_severity.py::test_heart_rate_rises_with_severity
@@ -671,11 +723,16 @@ findings:
     runs: 'canonical runs: investigation run of 2026-10-23 at commit 5754940 (runs.db)'
 conclusion: '## Claims
 
-  The hypothesis holds on all six criteria (7/7 tests passed). The criteria were fixed before the canonical runs but after a pilot that included severity 0.2 and 0.8; the unseen points (0.4, 0.6, 1.0) fall where the hypothesis predicts.
+  The hypothesis holds on all six criteria (7/7 tests passed). The criteria were fixed
+  before the canonical runs but after a pilot that included severity 0.2 and 0.8;
+  the unseen points (0.4, 0.6, 1.0) fall where the hypothesis predicts.
 
 
   ## Limitations
 
-  One patient, one site and 10 minutes. The time at which MAP leaves its starting band is not reported: beat-to-beat dips cross a 2 mmHg band before any sustained fall.
+  One patient, one site and 10 minutes. MAP is recorded once a second, so dips within
+  a heartbeat are not seen. At that resolution no sample at severity 0.2 or 0.4 leaves
+  a 2 mmHg band around the start (largest deviations 1.13 and 1.78 mmHg); severity
+  0.6, 0.8 and 1.0 first leave it at 416, 447 and 366 s.
 
   '
