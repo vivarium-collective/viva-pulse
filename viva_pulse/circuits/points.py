@@ -68,7 +68,7 @@ def _airway_device_possible(config: dict[str, Any], state: dict[str, Any]) -> bo
     from . import MODULES
 
     return state.get("AirwayMode", "Free") != "Free" or any(
-        MODULES[name].airway_device for name in config.get("modules", []) if name in MODULES)
+        MODULES[name].airway_device for name in config["modules"] if name in MODULES)
 
 
 def _point_module(name: str, circuit: str, fluid: str, ports: dict[str, tuple[str, tuple[str, str]]]):
@@ -94,14 +94,12 @@ def _point_module(name: str, circuit: str, fluid: str, ports: dict[str, tuple[st
                        and set(topology["Node"]) <= set(c.get("Node", []))
                        for p in topology["Path"] if p not in c.get("Path", [])}
             readable_paths = [p for p in readable_paths if p not in dropped]
-            chosen = [p for p in config.get(paths_key, []) if p in dropped]
+            chosen = [p for p in config[paths_key] if p in dropped]
             if chosen:
                 raise ValueError(f"{circuit} paths {chosen} stop being solved while an airway device is "
                                  f"connected, and this engine can connect one; they can't be read")
-        # bigraph-schema leaves a list config whose default is [] out of the config
-        # entirely when it isn't supplied, so a missing key means the default.
-        selected_nodes = _select("node", list(config.get(nodes_key, [])), topology["Node"], circuit)
-        selected_paths = _select("path", list(config.get(paths_key, [])), readable_paths, circuit)
+        selected_nodes = _select("node", list(config[nodes_key]), topology["Node"], circuit)
+        selected_paths = _select("path", list(config[paths_key]), readable_paths, circuit)
 
         compartments = state["CompartmentManager"][f"{fluid}Compartment"]
         taken = {c["FluidCompartment"]["Compartment"]["Name"]

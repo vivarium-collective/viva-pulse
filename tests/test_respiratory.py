@@ -207,12 +207,14 @@ def test_ventilation_mechanics_settles_before_time_zero():
     assert math.isfinite(_mech(rows[0])["peak_inspiratory_pressure_cmH2O"])
 
 
-def test_settling_that_runs_out_names_the_unserved_request():
+@pytest.mark.parametrize("max_settle_s", [2.5, 0.0])
+def test_settling_that_runs_out_names_the_unserved_request(max_settle_s):
     """Falsifies: an engine still unsettled after max_settle_s starts anyway with NaN
     stores. The first breath completes after ~6 s, so 2.5 s must fail the load, naming
-    the request."""
+    the request. 0.0 means no settling (bigraph-schema before 1.8.3 replaced an explicit
+    0.0 with the 30 s default, so that load succeeded)."""
     process = PulseCircuitProcess({"model_type": "ventilation_mechanics", "modules": ["respiratory"],
-                                   "max_settle_s": 2.5}, core=build_core())
+                                   "max_settle_s": max_settle_s}, core=build_core())
     with pytest.raises(ValueError, match="NaN for: physiology:PeakInspiratoryPressure"):
         process.initial_state()
 
