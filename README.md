@@ -1,6 +1,14 @@
 # viva-pulse
 
-[![Documentation](https://readthedocs.org/projects/viva-pulse/badge/?version=latest)](https://viva-pulse.readthedocs.io/en/latest/)
+<!-- BEGIN:badges -->
+[![CI](https://github.com/vivarium-collective/viva-pulse/actions/workflows/workspace-ci.yml/badge.svg)](https://github.com/vivarium-collective/viva-pulse/actions/workflows/workspace-ci.yml)
+[![read-only workbench](https://img.shields.io/badge/read--only_workbench-live-2ea44f)](https://vivarium-collective.github.io/viva-pulse/workbench/)
+[![license](https://img.shields.io/github/license/vivarium-collective/viva-pulse)](./LICENSE)
+<!-- END:badges -->
+
+<!-- BEGIN:dashboard -->
+**[Open the read-only workbench](https://vivarium-collective.github.io/viva-pulse/workbench/)** to browse every composite, study, and result in your browser — or run it locally below.
+<!-- END:dashboard -->
 
 A [process-bigraph](https://github.com/vivarium-collective/process-bigraph) wrapper that drives the **real** [Kitware Pulse Physiology Engine](https://gitlab.kitware.com/physiology/engine) (whole-body adult model). Pulse runs as a time-stepped `Process`. Interventions are input ports, vital signs are output ports, and simulations are ordinary `process_bigraph.Composite` documents. Nothing is reimplemented or mocked: every number comes from Pulse's C++ engine through its own Python bindings.
 
