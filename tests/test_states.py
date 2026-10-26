@@ -107,6 +107,11 @@ def test_a_time_before_the_engine_raises(tmp_path):
 def test_the_command_line_saves_a_sequence(tmp_path):
     """Falsifies: ``python -m viva_pulse.states`` doesn't load the named state or doesn't save
     at the requested times; or a relative path is looked up under bin/states/."""
+    # The CLI loads the real engine in a subprocess, where a missing Pulse build
+    # surfaces as a non-zero exit rather than a PulseNotFoundError this process
+    # can see. Probe in-process first so the engine-free suite skips this test
+    # (conftest converts the error to a skip) instead of failing on the exit code.
+    ensure_pulse_importable()
     # Run the viva_pulse under test, whatever the working directory.
     env = {**os.environ, "PYTHONPATH": str(Path(viva_pulse.__file__).parents[1])}
     out = tmp_path / "out"
