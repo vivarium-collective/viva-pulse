@@ -35,37 +35,84 @@ args=(--workspace "$WS_ROOT" --out "$OUT")
 [ -n "$BASE_PATH" ] && args+=(--base-path "$BASE_PATH")
 [ -n "$INTERACTIVE_URL" ] && args+=(--interactive-url "$INTERACTIVE_URL")
 
-# Render each study's declared figures BEFORE building the bundle. The rendered
-# figures live in studies/<slug>/viz/ which is gitignored, so a fresh checkout
-# (e.g. CI) has none and the published snapshot would ship with empty
-# Visualizations tabs. render_viz is standalone — it reads each study's committed
-# runs.db, no server and no simulator engine needed — so it works in CI. A study
-# that fails to render is skipped, never failing the publish.
+# Render every study figure BEFORE building the bundle. Rendered figures live in
+# studies/<slug>/viz/ which is gitignored, so a fresh checkout (e.g. CI) has none
+# and the published snapshot would ship with empty Visualizations tabs. Both
+# renderers below read each study's committed runs.db — no server, no simulator
+# engine — so they work in CI:
+#   * render_viz                     -> each study's declared `visualizations:` (custom figures)
+#   * comparative_runs.render_...    -> each study's `comparative_visualizations:` (baseline-vs-arm overlays)
+# A figure that fails to render is skipped, never failing the publish.
 PYTHONPATH="$WS_ROOT${PYTHONPATH:+:$PYTHONPATH}" python - "$WS_ROOT" <<'PY'
 import sys
 from pathlib import Path
 ws = Path(sys.argv[1])
+studies = ws / "workspace" / "studies"
+
+# --- custom figures (declared `visualizations:`) ---
 try:
     from vivarium_workbench.lib.investigation_viz_mutations import render_viz
+    if studies.is_dir():
+        for d in sorted(p for p in studies.iterdir() if (p / "study.yaml").is_file()):
+            if not (d / "runs.db").is_file():
+                continue
+            try:
+                body, status = render_viz(ws, {"name": d.name})
+                n = len(body.get("viz_paths") or []) if isinstance(body, dict) else 0
+                print(f"render: {d.name} -> {status} ({n} figure(s))")
+            except Exception as e:  # noqa: BLE001 — never block the publish on one figure
+                print(f"render: {d.name} -> error, skipped: {e}")
 except Exception as e:  # noqa: BLE001 — older workbench without the lib entry
-    print(f"render: skipped (render_viz unavailable: {e})")
-    sys.exit(0)
-studies = ws / "workspace" / "studies"
-if studies.is_dir():
-    for d in sorted(p for p in studies.iterdir() if (p / "study.yaml").is_file()):
-        if not (d / "runs.db").is_file():
-            continue
-        try:
-            body, status = render_viz(ws, {"name": d.name})
-            n = len(body.get("viz_paths") or []) if isinstance(body, dict) else 0
-            print(f"render: {d.name} -> {status} ({n} figure(s))")
-        except Exception as e:  # noqa: BLE001 — never block the publish on one figure
-            print(f"render: {d.name} -> error, skipped: {e}")
+    print(f"render: custom figures skipped (render_viz unavailable: {e})")
+
+# --- comparative figures (declared `comparative_visualizations:`) ---
+# The live path renders these only at the END of an investigation run (which needs
+# the engine); the renderer itself only reads runs.db, so it runs standalone here.
+try:
+    import yaml as _yaml
+    from vivarium_workbench.lib.comparative_runs import (
+        render_investigation_comparative_visualisations as _render_comp,
+    )
+
+    class _Job:  # the renderer only touches job.{items,update_item} on a per-figure error
+        items = [None]
+        def update_item(self, *a, **k):
+            print(f"render(comparative): warning {k}")
+
+    inv_dir = ws / "workspace" / "investigations"
+    if inv_dir.is_dir():
+        for inv in sorted(p for p in inv_dir.iterdir() if p.is_dir()):
+            spec_path = inv / "investigation.yaml"
+            if not spec_path.is_file():
+                continue
+            try:
+                spec = _yaml.safe_load(spec_path.read_text(encoding="utf-8")) or {}
+                _render_comp(ws, inv.name, spec, _Job())
+                import glob as _glob
+                n = len(_glob.glob(str(studies / "*" / "viz" / "comparative_*.html")))
+                print(f"render(comparative): {inv.name} -> {n} comparative figure(s) on disk")
+            except Exception as e:  # noqa: BLE001
+                print(f"render(comparative): {inv.name} -> error, skipped: {e}")
+except Exception as e:  # noqa: BLE001 — older workbench without comparative_runs
+    print(f"render(comparative): skipped ({e})")
 PY
 
 # The workspace's own package must be importable for build_core() registration.
 PYTHONPATH="$WS_ROOT${PYTHONPATH:+:$PYTHONPATH}" \
   vivarium-workbench-publish "${args[@]}"
+
+# Fix base-path on embed-figure urls. The publisher base-path-prefixes app assets
+# and the custom figures, but a study's embed_visualizations are emitted with a
+# RELATIVE url (`workspace/studies/.../viz/comparative_*.html`); under a project
+# base-path they resolve against the study-detail page's own dir (…/studies/<slug>/)
+# and 404. Rewrite those relative figure urls to the base-path-absolute location
+# the files actually live at. (No-op for root hosting where BASE_PATH is empty.)
+# Tracked upstream in upstream-issues/vivarium-workbench.md.
+if [ -n "$BASE_PATH" ]; then
+  find "$OUT/studies" -name 'index.html' -type f -print0 2>/dev/null | while IFS= read -r -d '' f; do
+    perl -0pi -e "s{(\b(?:src|href)=\")workspace/}{\${1}${BASE_PATH}/workspace/}g" "$f"
+  done
+fi
 
 # Strip bigraph-loom source maps (~half the bundle) — a read-only viewer never
 # needs them — and disable Jekyll so files starting with _ are served.
