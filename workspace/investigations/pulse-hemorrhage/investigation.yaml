@@ -23,18 +23,11 @@ members:
 - fluid-resuscitation
 - patient-cohort
 executive:
-  what_is_this: Three workbench studies of hemorrhage in the real Pulse whole-body
-    engine.
-  verdict: All criteria passed (37/37 study tests) on the canonical runs. The criteria
-    were fixed before those runs, from pilots that overlapped them (workspace/experiments/_runs.yaml).
+  what_is_this: Three workbench studies of hemorrhage in the real Pulse whole-body engine.
+  verdict: All criteria passed (38/38 study tests) on the canonical runs. The criteria were fixed before those runs, from pilots that overlapped them (workspace/experiments/_runs.yaml), except two severity checks added on 2026-10-26 after the runs (every-sample MAP band), which are regression checks.
   verdict_status: passed
-  verdict_detail: 'Severity: loss and heart rate rise with severity; MAP holds to
-    severity 0.4, then falls. Resuscitation: treatment preserves blood volume and
-    MAP, but saline and whole blood can''t be told apart in 10 min. Cohort: every
-    shipped patient compensates; smaller patients lose a larger fraction (rho = -0.91).'
-  decisions_needed:
-  - question: Run the longer saline-vs-blood follow-up?
-    context: fluid-resuscitation's controller infused only 79.6 mL in 10 min.
+  verdict_detail: 'Severity: loss and heart rate rise with severity; MAP holds to severity 0.4, then falls. Resuscitation: treatment preserves blood volume and MAP; saline and whole blood add the same volume by Pulse''s construction, so volume and MAP barely differ (about 1e-5 after 500 mL). Cohort: every shipped patient compensates; smaller patients lose a larger fraction (rho = -0.91).'
+  decisions_needed: []
   computed_verdict_status: in-progress
   computed_acceptance:
     criteria:
@@ -70,30 +63,22 @@ executive:
       behavior: smaller-patients-lose-larger-fraction
       result: in-progress
     diverges_from_authored: true
-question: 'How does the whole-body Pulse engine respond to a hemorrhage: how does
-  the response scale with bleed severity, does closed-loop fluid resuscitation change
-  it, and does the same bleed behave the same across Pulse''s 21 shipped patients?
+  decisions_resolved:
+  - 'Run the longer saline-vs-blood follow-up? — Resolved: No (2026-10-26). In Pulse an infusion adds volume at its commanded rate whatever the compound (DrugModel.cpp, IVToVenaCava flow source); the compound only adds its substances. At equal rates saline and whole blood therefore add the same volume, and after 500 mL over 300 s blood volume and MAP were within about 1e-5 of each other (tests/test_processes.py::test_infused_volume_does_not_depend_on_the_compound). A compound comparison needs oxygen-carrying readouts, not a longer run.'
+question: 'How does the whole-body Pulse engine respond to a hemorrhage: how does the response scale with bleed severity, does closed-loop fluid resuscitation change it, and does the same bleed behave the same across Pulse''s 21 shipped patients?
 
   '
-hypothesis: 'Blood loss scales with severity while the baroreflex holds arterial pressure
-  until the bleed is severe; a MAP-targeted infusion preserves blood volume and pressure;
-  and every shipped patient compensates the same way, with smaller patients losing
-  a larger fraction of their blood.
+hypothesis: 'Blood loss scales with severity while the baroreflex holds arterial pressure until the bleed is severe; a MAP-targeted infusion preserves blood volume and pressure; and every shipped patient compensates the same way, with smaller patients losing a larger fraction of their blood.
 
   '
-description: 'Three studies on the pulse_hemorrhage and pulse_resuscitation composites,
-  run through the workbench and recorded in each study''s runs.db. Their pass criteria
-  are pytest files in each study''s tests/ directory, fixed before the canonical runs
-  and after the pilots recorded in workspace/experiments/_runs.yaml.
+description: 'Three studies on the pulse_hemorrhage and pulse_resuscitation composites, run through the workbench and recorded in each study''s runs.db. Their pass criteria are pytest files in each study''s tests/ directory, fixed before the canonical runs and after the pilots recorded in workspace/experiments/_runs.yaml.
 
   '
 scientific_argument:
-  main_claim: Pulse's baroreflex holds arterial pressure against mild bleeds by raising
-    heart rate, and loses it once the bleed is severe.
+  main_claim: Pulse's baroreflex holds arterial pressure against mild bleeds by raising heart rate, and loses it once the bleed is severe.
   evidence_for:
   - hemorrhage-severity-sweep F-01, F-02
-  - patient-cohort F-01 (at severity 0.8, every patient raises heart rate and loses
-    MAP)
+  - patient-cohort F-01 (at severity 0.8, every patient raises heart rate and loses MAP)
   evidence_against: []
   key_figures:
   - hemorrhage-severity-sweep/viz/severity-response.html
@@ -102,15 +87,7 @@ scientific_argument:
   caveats:
   - One bleed site (RightLeg) and 10-minute runs throughout.
   - Pulse is deterministic, so each condition is one run.
-  - The cohort criteria and the severity criteria at 0.2 and 0.8 were set after a
-    deterministic pilot of the same configurations.
-biological_story: 'A bleed lowers blood volume, which lowers the blood returning to
-  the heart and so the volume it can pump per beat. The baroreflex senses the falling
-  pressure and raises heart rate, which holds arterial pressure up while the loss
-  is modest. In these runs that compensation held pressure within about a millimetre
-  of mercury up to severity 0.4 (823 mL lost in 10 minutes); beyond that, cardiac
-  output kept falling and pressure followed. Across patients the same bleed removes
-  1.1 to 1.8 L while starting blood volume spans 2.9 to 7.1 L, so smaller patients
-  lose a larger share of their blood.
+  - The cohort criteria and the severity criteria at 0.2 and 0.8 were set after a deterministic pilot of the same configurations.
+biological_story: 'A bleed lowers blood volume, which lowers the blood returning to the heart and so the volume it can pump per beat. The baroreflex senses the falling pressure and raises heart rate, which holds arterial pressure up while the loss is modest. In these runs that compensation kept pressure within 2 mmHg of its start at every sample, and ended within about a millimetre of mercury, up to severity 0.4 (823 mL lost in 10 minutes); beyond that, cardiac output kept falling and pressure followed. Across patients the same bleed removes 1.1 to 1.8 L while starting blood volume spans 2.9 to 7.1 L, so smaller patients lose a larger share of their blood.
 
   '

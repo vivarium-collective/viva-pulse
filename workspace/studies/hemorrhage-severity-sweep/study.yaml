@@ -667,11 +667,11 @@ pipeline_gate:
     evaluated_by: code
     diverges_from_authored: true
 last_test_run:
-  timestamp: '2026-10-26T20:02:01+00:00'
+  timestamp: '2026-10-26T20:21:13+00:00'
   passed: 8
   failed: 0
   skipped: 0
-  duration_s: 0.39664196968078613
+  duration_s: 0.42679500579833984
 claim: 'Blood loss and heart rate rise steadily with severity, while MAP ends within
   1.1 mmHg of its start, and never strays more than 1.8 mmHg, up to severity 0.4 and
   falls 7-17 mmHg from severity 0.6 upward.
@@ -688,7 +688,7 @@ findings:
     study_tests:
     - tests/test_severity.py::test_blood_loss_rises_with_severity
     - tests/test_severity.py::test_heart_rate_rises_with_severity
-    runs: 'canonical runs: investigation run of 2026-10-23 at commit 5754940 (runs.db)'
+    runs: 'canonical runs: investigation run of 2026-10-25 at commit b4332d6 (runs.db)'
 - id: F-02
   tier: observation
   statement: MAP ended at 95.0 and 94.2 mmHg for severity 0.2 and 0.4 (start 95.3),
@@ -699,7 +699,7 @@ findings:
     study_tests:
     - tests/test_severity.py::test_pressure_held_for_mild_bleeds
     - tests/test_severity.py::test_pressure_falls_for_severe_bleeds
-    runs: 'canonical runs: investigation run of 2026-10-23 at commit 5754940 (runs.db)'
+    runs: 'canonical runs: investigation run of 2026-10-25 at commit b4332d6 (runs.db)'
 - id: F-03
   tier: observation
   statement: Severity 0.8 reproduces the earlier reference run (blood volume 3936
@@ -707,7 +707,7 @@ findings:
   evidence:
     study_tests:
     - tests/test_severity.py::test_reproduces_reference_run
-    runs: 'canonical runs: investigation run of 2026-10-23 at commit 5754940 (runs.db)'
+    runs: 'canonical runs: investigation run of 2026-10-25 at commit b4332d6 (runs.db)'
 - id: F-04
   tier: mechanism
   mechanism_origin: emergent
@@ -720,7 +720,7 @@ findings:
     study_tests:
     - tests/test_severity.py::test_heart_rate_rises_with_severity
     - tests/test_severity.py::test_pressure_falls_for_severe_bleeds
-    runs: 'canonical runs: investigation run of 2026-10-23 at commit 5754940 (runs.db)'
+    runs: 'canonical runs: investigation run of 2026-10-25 at commit b4332d6 (runs.db)'
 conclusion: '## Claims
 
   The hypothesis holds on all six criteria (7/7 tests passed). The criteria were fixed
