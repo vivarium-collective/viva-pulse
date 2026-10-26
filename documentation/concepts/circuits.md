@@ -75,8 +75,8 @@ nodes, and a link is a named path. So before loading, the module adds, for every
 
 Ordinary data requests then read them. A compartment whose only link is the path has
 `Inflow - Outflow` equal to that path's flow. Pulse solves the same circuit either way: a run
-reading every point is bit-identical to one without, and every reading matches Pulse's own
-saved circuit values.
+reading every point matches one without to within Pulse's own run-to-run noise (about 1e-14),
+and every reading matches Pulse's own saved circuit values.
 
 ## The thermal circuit
 

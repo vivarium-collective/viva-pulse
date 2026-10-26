@@ -16,8 +16,8 @@ steps, so 10 s is reached as 9.999999999999876). An existing file is never overw
 
 Only whole-body engines can be saved: Pulse doesn't serialize VentilationMechanics.
 ``save_states`` drives the engine it is given. It is for an engine you hold (Pulse's API,
-the command line); the engine inside a ``PulseProcess`` or ``PulseCircuitProcess`` belongs to
-the running composite, which advances it itself.
+the command line). A ``PulseProcess`` or ``PulseCircuitProcess`` in a running composite saves
+its own engine instead, through its ``save_state_times_s`` config (``StateSaver``).
 
 Command line, from a state file Pulse ships (a bare name) or a path::
 
@@ -27,6 +27,7 @@ Command line, from a state file Pulse ships (a bare name) or a path::
 from __future__ import annotations
 
 import argparse
+import glob
 import math
 from pathlib import Path
 from typing import Sequence
@@ -38,6 +39,52 @@ TIME_DECIMALS = 6
 def _seconds(t: float) -> str:
     """``t`` in fixed point at TIME_DECIMALS, without trailing zeros: 10, 2.5, 86400.02."""
     return f"{t:.{TIME_DECIMALS}f}".rstrip("0").rstrip(".")
+
+
+def _checked(times_s: Sequence[float], name: str) -> list[float]:
+    """``times_s`` as floats, after checking it and ``name`` (shared by both entry points)."""
+    if isinstance(times_s, (int, float)):
+        raise ValueError(f"times_s must be a sequence of times, got the number {times_s}")
+    if not name or "/" in name or "@" in name:
+        raise ValueError(f"name must be non-empty, without '/' or '@', got {name!r}")
+    times = [float(t) for t in times_s]
+    if not times:
+        raise ValueError("times_s is empty")
+    if not all(math.isfinite(t) for t in times) or any(b <= a for a, b in zip(times, times[1:])):
+        raise ValueError(f"times_s must be finite and strictly increasing, got {list(times_s)}")
+    return times
+
+
+class StateSaver:
+    """Saves a process's engine at the first update boundary at or after each time.
+
+    A process advances its engine by its own interval, so a save never steps the engine:
+    stepping to an exact time inside an update would shift the rest of that update and
+    change the run. Called after the engine loads and after every update; when one or more
+    pending times have been reached, it saves once, named by the engine's time. Times past
+    the end of the run are never saved. States of the same name already in ``out_dir``
+    raise at construction; two processes saving into one directory need different names.
+    """
+
+    def __init__(self, times_s: Sequence[float], out_dir: str | Path, name: str):
+        self.pending = _checked(times_s, name)
+        if not str(out_dir):
+            raise ValueError("save_state_dir must be set when save_state_times_s is")
+        self.out_dir, self.name = Path(out_dir), name
+        # Fail when the composite is built, not partway through the run.
+        existing = sorted(self.out_dir.glob(f"{glob.escape(name)}@*s.json"))
+        if existing:
+            raise FileExistsError(f"{self.out_dir} already holds states named {name!r} "
+                                  f"({existing[0].name}, ...); use another save_state_dir or "
+                                  "save_state_name")
+        self.saved: list[Path] = []
+
+    def __call__(self, engine) -> None:
+        now = round(engine.pull_data()[0], TIME_DECIMALS)
+        if self.pending and round(self.pending[0], TIME_DECIMALS) <= now:
+            while self.pending and round(self.pending[0], TIME_DECIMALS) <= now:
+                self.pending.pop(0)
+            self.saved += save_states(engine, self.out_dir, [engine.pull_data()[0]], self.name)
 
 
 def save_states(engine, out_dir: str | Path, times_s: Sequence[float], name: str = "state") -> list[Path]:
@@ -54,15 +101,7 @@ def save_states(engine, out_dir: str | Path, times_s: Sequence[float], name: str
     """
     import PyPulse
 
-    if isinstance(times_s, (int, float)):
-        raise ValueError(f"times_s must be a sequence of times, got the number {times_s}")
-    if not name or "/" in name or "@" in name:
-        raise ValueError(f"name must be non-empty, without '/' or '@', got {name!r}")
-    times = [float(t) for t in times_s]
-    if not times:
-        raise ValueError("times_s is empty")
-    if not all(math.isfinite(t) for t in times) or any(b <= a for a, b in zip(times, times[1:])):
-        raise ValueError(f"times_s must be finite and strictly increasing, got {list(times_s)}")
+    times = _checked(times_s, name)
     if not engine.serialize_to_string(PyPulse.serialization_format.json):
         raise ValueError("Pulse can't save this engine's state (only whole-body engines serialize; "
                          "VentilationMechanics doesn't)")
