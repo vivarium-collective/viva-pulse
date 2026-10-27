@@ -48,7 +48,9 @@ uv pip install -e '.[dev]'
 
 `-DPython3_EXECUTABLE` is ignored by Pulse's CMake; the venv is selected with `-DPulse_PYTHON_HOME_DIR` together with `VIRTUAL_ENV`. Build pins and known workarounds are in [.build-progress.md](.build-progress.md).
 
-**Never run `uv sync`.** The venv is assembled by hand, and a sync would resolve protobuf away from the version Pulse generated its bindings with. It would also remove the dev and engine requirements. Run everything with `uv run --no-sync`.
+`[dev]` adds pytest and the `workbench` extra: the workbench and what the studies, figures and reports use. The library itself (the processes and composites) needs neither, so another project can depend on viva-pulse without extras.
+
+**Never run `uv sync`.** The venv is assembled by hand, and a sync would write a lock file and remove the dev extra and the engine requirements. Run everything with `uv run --no-sync`.
 
 ### Finding the Pulse install
 

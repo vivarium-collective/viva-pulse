@@ -34,8 +34,7 @@ the repository's `.build-progress.md`.
 
 :::{warning}
 **Never run `uv sync`.** The venv is assembled by hand. A sync would write a lock file and
-resolve protobuf away from the version Pulse generated its bindings with (7.35.x). It would
-also remove the dev extra and the engine requirements. Run everything with
+remove the dev extra and the engine requirements. Run everything with
 `uv run --no-sync`.
 :::
 
@@ -52,8 +51,11 @@ falls back to another location. See {doc}`api/runtime`.
 
 ## Optional parts
 
-- **The workbench.** `vivarium-workbench` is a dependency, pinned to a `main` commit in
-  `pyproject.toml`, so `uv pip install -e '.[dev]'` installs it. Serve it from this venv:
+- **The workbench.** `vivarium-workbench` is in the `workbench` extra, with what the studies,
+  figures and reports use. It is pinned to a `main` commit in `pyproject.toml`, and the `dev`
+  extra includes it, so `uv pip install -e '.[dev]'` installs it. The library (the processes
+  and composites) needs none of it: a project using viva-pulse as a dependency installs viva-pulse
+  without extras. Serve the workbench from this venv:
   see {doc}`howto/run-studies-in-the-workbench`.
 - **These docs.** `uv pip install --group docs`, then `make docs` builds them, running every
   tutorial against the engine, and opens them in your browser.

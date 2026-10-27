@@ -16,15 +16,22 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Medical Science Apps.",
 ]
 # Pulse itself is not on PyPI: build it from source (see README.md) and point
-# PULSE_INSTALL_DIR at the install prefix. These are the runtime deps of
-# Pulse's own Python API; protobuf must match the Pulse build (7.35.x).
+# PULSE_INSTALL_DIR at the install prefix. These are all the library needs.
+# protobuf: Pulse's generated _pb2 code refuses a runtime older than 7.35.0; the
+# next major is untested, so it is excluded.
 dependencies = [
     "bigraph-schema>=1.8.3",
     "process-bigraph>=1.10.1",
     "numpy",
-    "pandas",
     "platformdirs",  # cache directory for stabilized patient states
-    "protobuf",
+    "protobuf>=7.35,<8",
+]
+
+[project.optional-dependencies]
+# The workspace: studies, figures, reports and the workbench that runs them.
+workbench = [
+    "vivarium-workbench",
+    "pandas",
     "bigraph-viz>=2.0.3",
     "pyyaml>=6.0",
     "jsonschema[format-nongpl]>=4.21",
@@ -32,11 +39,8 @@ dependencies = [
     "pypdf>=4.0",
     "matplotlib",
     "plotly",
-    "vivarium-workbench",
 ]
-
-[project.optional-dependencies]
-dev = ["pytest", "plotly", "bigraph-viz"]
+dev = ["viva-pulse[workbench]", "pytest"]
 
 # The user documentation (`make docs`); its tutorials run the real engine, so it
 # builds in this project's venv: `uv pip install --group docs`.
