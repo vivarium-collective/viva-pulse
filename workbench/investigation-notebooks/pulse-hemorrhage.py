@@ -257,7 +257,7 @@ def _render_one(address, config, runs_db, study_yaml, overrides=None):
 # (the baroreflex compensates by raising heart rate) and falls only once the
 # bleed is severe enough to outrun that compensation.
 #
-# **Claim.** Blood loss and heart rate rise steadily with severity, while MAP stays within 1.1 mmHg of its start up to severity 0.4 and falls 7-17 mmHg from severity 0.6 upward.
+# **Claim.** Blood loss and heart rate rise steadily with severity, while MAP ends within 1.1 mmHg of its start, and never strays more than 1.8 mmHg, up to severity 0.4 and falls 7-17 mmHg from severity 0.6 upward.
 
 # ### Parameters
 #
@@ -826,6 +826,3 @@ else:
 
 # cohort-blood-loss
 _save_viz('patient-cohort', 'cohort-blood-loss', _render_one('local:CohortBloodLoss', {'inputs_map': {'blood_volume': 'vitals.blood_volume_mL', 'hemorrhaged_volume': 'vitals.total_hemorrhaged_volume_mL', 'mean_arterial_pressure': 'vitals.mean_arterial_pressure_mmHg'}}, RUNS_DB, STUDY_YAML))
-
-# ## Open decisions
-# - Run the longer saline-vs-blood follow-up?

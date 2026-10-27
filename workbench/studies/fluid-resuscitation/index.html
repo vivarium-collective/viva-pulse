@@ -697,7 +697,7 @@ and with the same controller infusing whole blood.
         <details class="finding-details">
           <summary class="finding-row">
             <span class="finding-status-glyph">◆</span>
-            <span class="finding-claim finding-statement">The improvement is produced by the engineered MapFluidController, not by the fluid itself. The loop watches MAP and commands infusion only once it falls below the 90 mmHg target, so the intervention is late (t=508 s) and small (79.6 mL); the restored volume, not the compound, drives the +78 mL / +2.2 mmHg gain. This is an engineered control term added to the composite, distinct from Pulse&#39;s own reflexes.</span>
+            <span class="finding-claim finding-statement">The improvement is produced by the engineered MapFluidController, not by the fluid itself. The loop watches MAP and commands infusion only once it falls below the 90 mmHg target, so the intervention is late (t=508 s) and small (79.6 mL); the restored volume, not the compound, drives the +78 mL / +2.2 mmHg gain. This is an engineered control term added to the composite, distinct from Pulse&#39;s own reflexes. The compound can&#39;t matter for volume, because Pulse adds infused volume at the commanded rate whatever the compound (DrugModel.cpp, the IVToVenaCava flow source) and the compound only adds its substances, so at equal rates saline and whole blood add the same volume and differ only in what the fluid carries (repo test tests/test_processes.py::test_infused_volume_does_not_depend_on_the_compound).</span>
             
           </summary>
           <div class="finding-drawer">
@@ -1397,7 +1397,7 @@ and with the same controller infusing whole blood.
       <div class="conclusion-md" style="background:#f8fafc;padding:12px;border-left:3px solid #94a3b8;border-radius:3px;font-size:0.9em;line-height:1.5"><h2>Claims</h2>
 <p>The hypothesis holds (7/7 tests passed): treatment preserves blood volume and MAP.</p>
 <h2>Limitations</h2>
-<p>With a 90 mmHg target the controller only engages in the last 92 s and infuses 79.6 mL, too little to separate saline from whole blood. Comparing compounds needs a longer run or an earlier-engaging controller (higher target or gain).</p>
+<p>With a 90 mmHg target the controller only engages in the last 92 s and infuses 79.6 mL. Saline and whole blood barely differ in this study's readouts: in Pulse an infusion adds volume at its commanded rate whatever the compound, so they differ mainly in what the fluid carries (hemoglobin, hematocrit, oxygen content), which these runs don't record.</p>
 </div>
     </div>
     
@@ -1494,7 +1494,7 @@ and with the same controller infusing whole blood.
           
           <div class="di-card di-fup-card">
             <div class="followup-header">
-              <strong class="followup-title">Saline vs whole blood over a longer resuscitation</strong>
+              <strong class="followup-title">Saline vs whole blood on oxygen-carrying readouts</strong>
               
               
               
@@ -1527,7 +1527,7 @@ and with the same controller infusing whole blood.
 </section>
 
 </main>
-<script>window.__DASH_CONFIG__ = { mode: "snapshot", interactiveUrl: "https://github.com/vivarium-collective/viva-pulse", basePath: "/viva-pulse/workbench", inputsDownloadBase: "https://github.com/vivarium-collective/viva-pulse/raw/main", provenance: {"repo_slug": "vivarium-collective/viva-pulse", "repo_url": "https://github.com/vivarium-collective/viva-pulse", "commit": "46983ee5c672c4d01a62230ffa3a6b74542bfe16", "commit_url": "https://github.com/vivarium-collective/viva-pulse/commit/46983ee5c672c4d01a62230ffa3a6b74542bfe16", "branch": "main", "lockfile": "uv.lock@691acdb78976", "generated_at": "2026-10-26 02:18 UTC"} };</script>
+<script>window.__DASH_CONFIG__ = { mode: "snapshot", interactiveUrl: "https://github.com/vivarium-collective/viva-pulse", basePath: "/viva-pulse/workbench", inputsDownloadBase: "https://github.com/vivarium-collective/viva-pulse/raw/main", provenance: {"repo_slug": "vivarium-collective/viva-pulse", "repo_url": "https://github.com/vivarium-collective/viva-pulse", "commit": "7f0bd1d13a62fb883fde60ba8d8839b1b2465dc0", "commit_url": "https://github.com/vivarium-collective/viva-pulse/commit/7f0bd1d13a62fb883fde60ba8d8839b1b2465dc0", "branch": "main", "lockfile": "uv.lock@05b08fc249bf", "generated_at": "2026-10-27 12:41 UTC"} };</script>
 <script src="/viva-pulse/workbench/assets/data-source.js"></script>
 <script src="/viva-pulse/workbench/assets/toast.js"></script>
 <script>
