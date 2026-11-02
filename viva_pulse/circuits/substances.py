@@ -103,8 +103,6 @@ SATURATING = {"Oxygen", "CarbonDioxide", "CarbonMonoxide"}
 #: Liquid graphs Pulse moves blood and its substances over (the circulation, kidneys included).
 #: Equipment compartments (ECMO, bag-valve mask, the aerosol copies of the airway) are outside them.
 CIRCULATION_GRAPHS = ("ActiveCardiovascular", "Cardiovascular", "Renal")
-#: Graphs of blood proper, where hemoglobin binds gases (Saturation).
-BLOOD_GRAPHS = ("ActiveCardiovascular", "Cardiovascular")
 #: The gas graph holding the airway; device compartments are outside it.
 AIRWAY_GRAPH = "Respiratory"
 #: Liquid compartments outside every transport graph that still hold substances: refused on
@@ -235,7 +233,10 @@ def _substance_outputs(config: dict[str, Any], state: dict[str, Any]) -> tuple[R
                      for side in ("Extracellular", "Intracellular")}
     readable = {"liquid": _graph_members(state, "Liquid", CIRCULATION_GRAPHS) | tissue_fluids,
                 "gas": _graph_members(state, "Gas", (AIRWAY_GRAPH,))}
-    blood = _graph_members(state, "Liquid", BLOOD_GRAPHS)
+    # Blood: compartments whose state holds hemoglobin. The circulation graphs also hold urine,
+    # chyme and the abdominal cavity, where Saturation reads 0 (or NaN for the parent Ureters).
+    blood = {name for name, c in liquids.items() if float(next(iter(
+        (_quantity(c, "Hemoglobin") or {}).get("Mass", {"_": {}}).values())).get("Value", 0.0)) > 0.0}
     outputs, labels = [], []
     for i, entry in enumerate(entries):
         name = f"substance_outputs[{i}]"
@@ -282,8 +283,8 @@ def _substance_outputs(config: dict[str, Any], state: dict[str, Any]) -> tuple[R
                 if volume.get("Value") == "Infinity":
                     raise ValueError(f"{name}: {compartment} is an infinite reservoir; its Volume is infinite")
             if prop == "Saturation" and kind == "liquid" and not set(_leaves(liquids, compartment)) <= blood:
-                raise ValueError(f"{name}: Saturation is a property of blood; {compartment} is not in the "
-                                 f"blood circulation (it reads 0 there)")
+                raise ValueError(f"{name}: Saturation is a property of blood; {compartment} holds no "
+                                 f"hemoglobin (it reads 0 or NaN there)")
             table = LIQUID_PROPERTIES if kind == "liquid" else GAS_PROPERTIES
             category, store = f"{kind}_compartment", compartment
         if prop not in table:

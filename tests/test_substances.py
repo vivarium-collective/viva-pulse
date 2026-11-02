@@ -155,6 +155,8 @@ def test_modules_are_registered_whole_body_only():
      "equipment compartment"),
     ([_entry("Oxygen", "Ambient", "Volume", "mL")], "infinite reservoir"),
     ([_entry("Oxygen", "BrainTissueExtracellular", "Saturation")], "Saturation is a property of blood"),
+    ([_entry("Oxygen", "LeftTubules", "Saturation")], "Saturation is a property of blood"),
+    ([_entry("CarbonDioxide", "Ureters", "Saturation")], "Saturation is a property of blood"),
     ([_entry("Calcium", "Aorta", "Molarity", "mEq/L")], "mEq/L is not offered"),
     ([_entry("Sodium", None, "PlasmaConcentration", "g/L")], "PlasmaConcentration is not offered"),
     ([_entry("Sodium", None, "TissueConcentration", "g/L")], "not offered here"),

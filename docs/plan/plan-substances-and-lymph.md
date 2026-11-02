@@ -139,6 +139,8 @@ Port names: property in snake_case plus `_<unit>`, the unit with `/` -> `_per_`,
 - Found while implementing: a tissue's **intracellular** fluid has no circuit node, so only its `Volume` is served (pressure and flows read NaN); the extracellular fluid has Volume, Pressure, Inflow and Outflow. `AcidicPhospohlipidConcentration` is left out, because Pulse's Python API has no MassPerMass unit class to request it in. `Ground` and `Lymph` hold substance-quantity entries in the state, so they are refused by name rather than by the holds-the-substance check.
 - Gas compartments: members of the state's `Respiratory` gas graph, plus parents whose leaves all are (so `Alveoli` is allowed; device compartments are not).
 
+- 2026-11-02, found when the user asked how to read every substance: building one entry for every valid combination (12,133 outputs on StandardMale) failed at load with NaN for `Ureters` saturation, and saturation read 0 in urine, chyme and the abdominal cavity, all of which are in the circulation graphs. `Saturation` is now allowed only where every leaf holds hemoglobin in the state (90 oxygen and CO2 entries, none 0 or NaN); tests for `LeftTubules` and `Ureters`, M14 re-run and caught. With that, all 12,133 entries load; a 30 s `pulse_whole_body_circuits` run takes 7.6 s with them against 3.0 s without (build 12.6 s), and 6,551 of them read 0 (mostly clearance masses).
+
 ### Mutation checks (2026-11-01)
 
 Each mutation was applied to a scratch copy of the code and the named tests were run (script `mutate.py` in the session scratchpad); every one is caught. M1-M12 were run first; after the diff review's fixes the set was re-run with M13-M16 added.
