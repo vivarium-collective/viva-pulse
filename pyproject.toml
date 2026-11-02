@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "viva-pulse"
-version = "0.7.0"
+version = "0.8.0"
 description = "Process-bigraph wrapper for the Kitware Pulse Physiology Engine"
 readme = "README.md"
 license = "Apache-2.0"
@@ -55,7 +55,7 @@ docs = [
 # The workbench runs studies in this project's own venv (it is the only one
 # that can import PyPulse), so it is pinned to the main commit installed there.
 [tool.uv.sources]
-vivarium-workbench = { git = "https://github.com/vivarium-collective/vivarium-workbench.git", rev = "d484974c" }
+vivarium-workbench = { git = "https://github.com/vivarium-collective/vivarium-workbench.git", rev = "b74cb02e" }
 
 [tool.hatch.build.targets.wheel]
 packages = ["viva_pulse"]

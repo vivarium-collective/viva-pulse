@@ -317,7 +317,7 @@ The investigation `pulse-hemorrhage` (`workspace/investigations/`) has three stu
 
 - **Sweeps are one variant per value.** The workbench runs `kind: sweep` only through its v2ecoli workflow, so each severity (and each patient) is its own variant.
 - **Figures.** `viva_pulse/visualizations/` adds a bespoke figure per study: the severity response, the fluid-resuscitation three-panel time course, and the cohort scatter. The labelled time courses (per arm, per patient) are the studies' `comparative_visualizations`, rendered at the end of an investigation run into each study's `viz/`.
-- **Known workbench limits** (drafted for upstream): `check-observables` and the report lint flag every `vitals.*` readout as not emittable, because they inspect the generator's document before the process fills `vitals/`; `tests/test_studies.py` checks the readouts against the running composite instead. The workbench's computed gate also reads only YAML behavior tests, so it shows these studies as blocked even though every pytest criterion passes.
+- **Known workbench limits.** The workbench's computed verdicts read only YAML behavior tests, so the investigation page shows these studies as blocked even though every pytest criterion passes; only the study detail page counts the pytest results. (With the pinned workbench, `check-observables`, and the report lint when run against the server, accept every `vitals.*` readout; older pins flagged them.)
 
 ## Documentation
 

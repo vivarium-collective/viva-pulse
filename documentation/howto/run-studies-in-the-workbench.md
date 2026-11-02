@@ -93,11 +93,12 @@ run.label, run.params, run.final("vitals.mean_arterial_pressure_mmHg")
 
 ## Known workbench limits
 
-- `check-observables` and the report lint flag every `vitals.*` readout as not emittable:
-  they inspect the generator's document, where `vitals/` is still empty, rather than the
-  running composite. `tests/test_studies.py` checks the readouts against the running
-  composite instead.
-- The dashboard's computed gate reads only YAML behavior tests, so the study cards show the
-  tests as pending even when every pytest criterion passes.
-- A figure can't receive which run is which, so labelled time courses are the studies'
-  `comparative_visualizations`.
+- The workbench's computed verdicts read only YAML behavior tests. The study detail page
+  counts the pytest results from the last `/api/study-tests-run` (not from a plain pytest
+  run), but the investigation page, its report and the needs-attention panel show the
+  studies as blocked, and the investigation's computed verdict as in progress.
+
+The bespoke figures don't declare the workbench's `run_labels` port, so labelled time
+courses are the studies' `comparative_visualizations`. With the pinned workbench,
+`check-observables`, and the report lint when run against the server, accept every
+`vitals.*` readout; older pins flagged them.
