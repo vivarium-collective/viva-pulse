@@ -142,7 +142,7 @@ jobs:
           import importlib.metadata as md, json, os, tomllib
           import google.protobuf
           assert google.protobuf.__version__ == os.environ["PROTOBUF_VERSION"], google.protobuf.__version__
-          # The [tool.uv.sources] pin, which the studies' runs.db manifests were recorded with.
+          # The [tool.uv.sources] pin: CI must run the workbench the project declares.
           with open("pyproject.toml", "rb") as f:
               pinned = tomllib.load(f)["tool"]["uv"]["sources"]["vivarium-workbench"]["rev"]
           vcs = json.loads(md.distribution("vivarium-workbench").read_text("direct_url.json"))["vcs_info"]

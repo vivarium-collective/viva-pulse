@@ -1,8 +1,9 @@
 """FluidResuscitationResponse: MAP, blood volume and commanded infusion over
 time for the three resuscitation arms.
 
-The three runs reach this figure without their arm names — a run's identity does
-not reach a Visualization. We separate them by signal instead: the arm whose
+The three runs reach this figure without their arm names: a run's identity reaches
+a Visualization only through a declared ``run_labels`` port, which this class doesn't
+declare. We separate them by signal instead: the arm whose
 commanded infusion never leaves zero is the untreated control; the other two are
 the treated arms (saline and whole blood), which the study finds indistinguishable
 over ten minutes, so they are drawn in one colour and overlap on purpose. A
