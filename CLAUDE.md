@@ -126,3 +126,13 @@ Nothing is mocked. Tests that need the engine drive the real Pulse build. The va
 - measured physiological effect thresholds, e.g. systemic resistance x2 drops HR by more than 15 bpm.
 
 The new tests were checked against deliberately broken copies of the code in the scratchpad: per-group validation, and never forwarding a return to baseline.
+
+## CI
+
+`.github/workflows/pulse-engine-ci.yml` runs the full suite on Linux (ubuntu-24.04) against a real Pulse build. Plan and rationale: [docs/plan/plan-ci-pulse-build.md](docs/plan/plan-ci-pulse-build.md).
+- Cold path: clone `REL_4_4_0`, assert the SHA, `.github/scripts/build-pulse.sh` (the `.build-progress.md` configure flags, with clang 22, Kitware's Linux compiler), then `verify-pulse-install.py`: all 21 states, the generated `_pb2` code, and a real 10 s StandardMale advance. Only then is `.pulse-build/install` cached. Data generation failures only warn in Pulse's build, so never drop that check.
+- The cache key covers the engine SHA, Python, CMake, the clang version and both scripts. A runner-image change it doesn't cover shows up as a failed "Verify the restored install"; rerun with `force_rebuild`. The monthly scheduled run also rebuilds from source.
+- Caches are per branch: a PR reads its own and main's, so a PR builds cold until main has a cache.
+- The venv is installed with `uv pip`, never `uv sync`, and `protobuf==7.35.0` last (the generated `_pb2` version; pyproject's `>=7.35,<8` bound is what library users get). `tests/test_packaging.py::test_protobuf_bound_matches_the_pulse_build` ties that bound to the version in the generated `_pb2` headers.
+- Any skip except `test_composite_state_artifacts` fails the run.
+- It runs alongside the template-synced `workspace-ci.yml`, which skips the engine tests (`tests/conftest.py`) and owns the workspace checks (local paths, lint, README and workflow freshness, publish render). Neither repeats the other's job.

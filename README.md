@@ -1,5 +1,6 @@
 # viva-pulse
 
+[![pulse-engine-ci](https://github.com/vivarium-collective/viva-pulse/actions/workflows/pulse-engine-ci.yml/badge.svg)](https://github.com/vivarium-collective/viva-pulse/actions/workflows/pulse-engine-ci.yml)
 <!-- BEGIN:badges -->
 [![CI](https://github.com/vivarium-collective/viva-pulse/actions/workflows/workspace-ci.yml/badge.svg)](https://github.com/vivarium-collective/viva-pulse/actions/workflows/workspace-ci.yml)
 [![read-only workbench](https://img.shields.io/badge/read--only_workbench-live-2ea44f)](https://vivarium-collective.github.io/viva-pulse/workbench/)
@@ -333,6 +334,8 @@ uv run --no-sync pytest -q
 ```
 
 The full suite takes about 225 s, most of it simulated time in the thermal, whole-body and resuscitation tests. Every engine-dependent test drives the real Pulse build; nothing is mocked. Where a test needs an expected value, it loads its own engine directly through Pulse's Python API.
+
+CI (`.github/workflows/pulse-engine-ci.yml`) runs the same suite on every pull request against a real Pulse build. It builds Pulse from source once per toolchain (`.github/scripts/build-pulse.sh`), checks the install with `.github/scripts/verify-pulse-install.py`, and caches it. Any skipped test fails the run, except `test_composite_state_artifacts` (the template test that skips when no composite-state artifacts are committed).
 
 ---
 ## Regarding...

@@ -1,0 +1,185 @@
+name: pulse-engine-ci
+
+# Runs the full test suite against a real Pulse build. Pulse has no prebuilt
+# release for this pin, so the engine is built from source (1-2 h) once per
+# toolchain and cached; later runs restore the install and take minutes.
+#
+# It runs alongside the viva-template workspace-ci.yml, which skips the engine
+# tests and carries the workspace checks (local paths, lint, README and
+# workflow freshness, publish render), so they are not repeated here. It
+# carries no viva-template provenance stamp on purpose:
+# scripts/check-workflow-freshness.py only checks stamped workflows.
+#
+# Actions caches are scoped per branch: a PR reads its own and main's entries,
+# so a PR builds cold until main has a cache. Unused entries are evicted after
+# 7 days, hence the twice-weekly run; the monthly one rebuilds from source so a
+# dead download URL in the superbuild surfaces here, not on the next pin bump.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      force_rebuild:
+        description: Rebuild Pulse from source and replace the cached install
+        type: boolean
+        default: false
+  schedule:
+    - cron: "17 6 * * 1,4"
+    - cron: "41 7 1 * *"
+
+# Never cancel a main or scheduled run: a cancelled cold build saves no cache.
+# Scheduled runs get their own group, so a push can't replace a queued one
+# (a group keeps at most one pending run).
+concurrency:
+  group: pulse-engine-ci-${{ github.ref }}-${{ github.event.schedule || 'run' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+  actions: write  # replace the cache entry on a forced rebuild
+
+env:
+  # Pin: .build-progress.md. REL_4_4_0 is the commit the wrapper was built against.
+  ENGINE_REF: REL_4_4_0
+  ENGINE_SHA: 5e29e5b13710a08cec90874be7d36ecb192ebcda
+  PYTHON_VERSION: 3.12.12
+  CMAKE_VERSION: 4.0.3
+  CLANG_MAJOR: "22"  # the compiler in Kitware's own Linux build (engine Dockerfile)
+  PROTOBUF_VERSION: 7.35.0  # the version Pulse generates its _pb2 code for
+  PULSE_INSTALL_DIR: ${{ github.workspace }}/.pulse-build/install
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: astral-sh/setup-uv@v10.2.0
+
+      - name: Install clang and CMake
+        id: toolchain
+        run: |
+          wget -qO- https://apt.llvm.org/llvm.sh | sudo bash -s -- "$CLANG_MAJOR"
+          echo "CC=clang-$CLANG_MAJOR" >> "$GITHUB_ENV"
+          echo "CXX=clang++-$CLANG_MAJOR" >> "$GITHUB_ENV"
+          uv tool install "cmake==$CMAKE_VERSION"
+          uv tool dir --bin >> "$GITHUB_PATH"
+          echo "clang=$(clang-"$CLANG_MAJOR" --version | sha256sum | cut -c1-12)" >> "$GITHUB_OUTPUT"
+
+      - name: Create the venv
+        run: |
+          uv python install "$PYTHON_VERSION"
+          # --seed: the Pulse build pip-installs protobuf into this venv.
+          uv venv --seed --python "$PYTHON_VERSION" .venv
+
+      - name: Decide whether to rebuild
+        id: plan
+        run: |
+          key="pulse-v1-${RUNNER_OS}-${RUNNER_ARCH}-${ENGINE_SHA:0:12}-py${PYTHON_VERSION}"
+          key+="-cmake${CMAKE_VERSION}-clang${{ steps.toolchain.outputs.clang }}"
+          key+="-${{ hashFiles('.github/scripts/build-pulse.sh', '.github/scripts/verify-pulse-install.py') }}"
+          echo "key=$key" >> "$GITHUB_OUTPUT"
+          force=${{ inputs.force_rebuild == true || github.event.schedule == '41 7 1 * *' }}
+          echo "force=$force" >> "$GITHUB_OUTPUT"
+
+      - name: Restore the Pulse install
+        id: cache
+        if: steps.plan.outputs.force != 'true'
+        uses: actions/cache/restore@v6
+        with:
+          path: .pulse-build/install
+          key: ${{ steps.plan.outputs.key }}
+
+      - name: Build Pulse from source
+        id: build
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          git clone --depth 1 --branch "$ENGINE_REF" https://gitlab.kitware.com/physiology/engine.git "$RUNNER_TEMP/engine"
+          actual=$(git -C "$RUNNER_TEMP/engine" rev-parse HEAD)
+          [ "$actual" = "$ENGINE_SHA" ] || { echo "::error::$ENGINE_REF is $actual, expected $ENGINE_SHA"; exit 1; }
+          uv pip install --python .venv -r "$RUNNER_TEMP/engine/requirements.txt"
+          start=$SECONDS
+          ENGINE_DIR="$RUNNER_TEMP/engine" VENV=.venv BUILD_DIR=.pulse-build bash .github/scripts/build-pulse.sh
+          echo "::notice title=Pulse built from source::$(( (SECONDS - start) / 60 )) min"
+
+      # Cache entries are immutable, so a forced rebuild deletes this ref's entry
+      # first. --ref matters: a key alone deletes the entry on every branch.
+      - name: Drop the cached install being replaced
+        if: steps.build.outcome == 'success' && steps.plan.outputs.force == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          KEY: ${{ steps.plan.outputs.key }}
+        run: |
+          existing=$(gh cache list --repo "$GITHUB_REPOSITORY" --ref "$GITHUB_REF" --key "$KEY" \
+            --json key --jq "map(select(.key == \"$KEY\")) | length")
+          if [ "$existing" != 0 ]; then
+            gh cache delete "$KEY" --repo "$GITHUB_REPOSITORY" --ref "$GITHUB_REF"
+          fi
+
+      # Only reached when the build and its verification passed.
+      - name: Save the Pulse install
+        if: steps.build.outcome == 'success'
+        uses: actions/cache/save@v6
+        with:
+          path: .pulse-build/install
+          key: ${{ steps.plan.outputs.key }}
+
+      # Never `uv sync` (it would write a lock and remove the engine requirements).
+      # protobuf goes last, at the exact version of Pulse's generated code.
+      - name: Install viva-pulse
+        run: |
+          uv pip install --python .venv -e ".[dev]" --group docs
+          uv pip install --python .venv -r "https://gitlab.kitware.com/physiology/engine/-/raw/$ENGINE_SHA/requirements.txt"
+          uv pip install --python .venv "protobuf==$PROTOBUF_VERSION"
+          .venv/bin/python - <<'EOF'
+          import importlib.metadata as md, json, os, tomllib
+          import google.protobuf
+          assert google.protobuf.__version__ == os.environ["PROTOBUF_VERSION"], google.protobuf.__version__
+          # The [tool.uv.sources] pin, which the studies' runs.db manifests were recorded with.
+          with open("pyproject.toml", "rb") as f:
+              pinned = tomllib.load(f)["tool"]["uv"]["sources"]["vivarium-workbench"]["rev"]
+          vcs = json.loads(md.distribution("vivarium-workbench").read_text("direct_url.json"))["vcs_info"]
+          # The pin may be a short SHA: check uv installed that exact rev, and the
+          # commit it resolved to.
+          assert vcs.get("requested_revision") == pinned and vcs["commit_id"].startswith(pinned), (vcs, pinned)
+          print("protobuf", google.protobuf.__version__, "| vivarium-workbench", vcs["commit_id"])
+          EOF
+
+      # After the install: the check imports Pulse's Python API, which needs
+      # protobuf and the engine requirements, and a restored venv has neither.
+      - name: Verify the restored install
+        if: steps.cache.outputs.cache-hit == 'true'
+        run: .venv/bin/python .github/scripts/verify-pulse-install.py "$PULSE_INSTALL_DIR"
+
+      - name: Run the tests
+        run: .venv/bin/python -m pytest tests/ -rA --color=yes --junitxml=pytest-results.xml
+
+      # A skipped engine test proves nothing about the engine, so skips fail the
+      # run. Allowed: the template test that skips when no composite-state
+      # artifacts are committed.
+      - name: Fail on unexpected skips
+        if: always() && hashFiles('pytest-results.xml') != ''
+        run: |
+          .venv/bin/python - <<'EOF'
+          import xml.etree.ElementTree as ET
+          ALLOWED = {"tests.test_composite_state_artifacts"}
+          cases = ET.parse("pytest-results.xml").getroot().iter("testcase")
+          skipped = [f"{c.get('classname')}::{c.get('name')}" for c in cases
+                     if c.find("skipped") is not None and c.get("classname") not in ALLOWED]
+          if skipped:
+              raise SystemExit("unexpected skips:\n  " + "\n  ".join(skipped))
+          print("no unexpected skips")
+          EOF
+
+      - uses: actions/upload-artifact@v7
+        if: always() && hashFiles('pytest-results.xml') != ''
+        with:
+          name: pytest-results
+          path: pytest-results.xml

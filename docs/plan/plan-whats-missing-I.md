@@ -8,8 +8,8 @@ vivarium-collective repos (no Kitware Pulse work).
 - **Phase 3:** done; the candidates are in the root agenda.
 
 The sections below are the 2026-10-23 snapshot. Since then:
-- the CI plan has become PR #7, green, and on hold until Nov 1;
-- the protobuf pin is tightened on that branch.
+- the CI plan has become PR #7 (`pulse-engine-ci.yml`, alongside `workspace-ci.yml`);
+- protobuf is bounded `>=7.35,<8` on main (#32).
 
 ## Context
 

@@ -1,11 +1,34 @@
 # Plan: real-engine CI (build Pulse in GitHub Actions)
 
-**Status:** scoped 2026-10-23 for later; not started. CI is currently red by
-the user's choice (accepted 2026-10-23). `workspace-ci.yml` runs `pytest tests/`
-on runners with no Pulse build: 28 engine tests fail with `PulseNotFoundError`,
-33 pass. The goal is a CI that runs the **full real-engine suite** on every PR.
-Skipping or mocking the engine tests is not an acceptable end state: a green
-build that never touched the engine proves nothing about it.
+**Status:** implemented 2026-10-23 as `.github/workflows/pulse-engine-ci.yml` (branch
+`ci/pulse-engine`). The body below is the original scope; where they differ, the
+implementation and the notes in this status block win.
+
+Decisions revised 2026-11-02, when main was merged into the branch:
+- `workspace-ci.yml` stays (the user's decision): Eran re-enabled it, template-syncs it (#37),
+  and it skips the engine tests (#26). It owns the workspace checks; this workflow builds Pulse
+  and runs the suite, and no longer repeats those checks.
+- protobuf: main's `>=7.35,<8` bound (#32, `test_protobuf_bound_matches_the_pulse_build`)
+  replaces the `<7.36` pin. CI still installs exactly 7.35.0.
+- The workbench pin is now a short SHA (#20), so the install check accepts the commit it prefixes.
+- No version bump here: the release is v0.8.0, done separately.
+
+Deviations, each re-checked at source when implementing:
+- The repo is public since 2026-10-23, so standard-runner minutes are free and required
+  status checks are available. The cost and enforcement notes under "Cost and risk" are stale.
+- Compiler: clang 22 from apt.llvm.org, as in Kitware's own Linux build (`engine/Dockerfile`
+  at the pin). CMake 4.0.3 and JDK 17 stay as in the verified macOS build.
+- The whole `install/` is cached. Pruning `lib/` relied on a macOS `otool` check that says
+  nothing about Linux linkage.
+- No separate canary test. `.github/scripts/verify-pulse-install.py` (all 21 states, `_pb2`
+  code, a real 10 s StandardMale advance) gates the cache save and checks every restored
+  install. An invalid `PULSE_INSTALL_DIR` already raises (`viva_pulse/runtime.py`).
+- No pass-count floor: pytest's failure exit plus the skip gate already mean that every
+  collected test ran.
+- Schedules: twice weekly to keep the cache under GitHub's 7-day eviction, plus a monthly
+  rebuild from source to catch dead superbuild download URLs.
+- The uv.lock check and the submodule step of `workspace-ci.yml` are not ported: no lock
+  by design, and no `external/`.
 
 ## Facts (verified at source)
 
