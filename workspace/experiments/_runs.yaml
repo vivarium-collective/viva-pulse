@@ -53,3 +53,16 @@ runs:
     The saved state records SimulationTime 9.999999999999876 at 10 s; the hemorrhage path
     RightLeg1Hemorrhage and link are in it; reload + 20 s matches the uninterrupted run to
     1.8e-8 relative (heart rate), not bit-identical.
+- id: substances-lymph-2026-11-01
+  model: Pulse HumanAdultWholeBody (direct, not a composite)
+  phase: scoping issues #35 (substance and tissue outputs) and #36 (lymph), plan-substances-and-lymph
+  parameters: {state_file: StandardMale@0s.json, modes: [lymph, reads, mass, observer, invalid, recheck], lymph_arms: [unperturbed, hemorrhage RightLeg 0.8, saline 250 mL/min], samples_s: [0, 1, 10, 60, 300]}
+  command: for m in lymph reads mass observer invalid recheck; do uv run --no-sync python workspace/experiments/substances-lymph-2026-11-01/probe_substances_lymph.py $m; done
+  outputs: [workspace/experiments/substances-lymph-2026-11-01/probes.jsonl]
+  timestamp: '2026-11-01'
+  note: >-
+    Run on a Linux x86_64 build of the same engine pin (5e29e5b13, built in a cloud workspace
+    with JDK 21, CMake 4.0.3, GCC, CPython 3.12.12; Eigen 5.0.1 from the macOS build tree and
+    pybind11 3.0.4 from PyPI because gitlab.com and the pybind11 archive URL were blocked).
+    StandardMale canary matches macOS: HR 72.05, MAP 95.25, BV 5487.3 at load and after 10 s.
+    Read and interpreted in docs/plan/plan-substances-and-lymph.md.

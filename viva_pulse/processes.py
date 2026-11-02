@@ -636,7 +636,8 @@ class PulseCircuitProcess(Process):
         unserved = [r for r, v in zip(self._requests, values) if math.isnan(v)]
         if unserved:
             raise ValueError("Pulse returned NaN for: " + ", ".join(
-                f"{r.category}:{r.compartment + '.' if r.compartment else ''}{r.property}"
+                f"{r.category}:{r.compartment + '.' if r.compartment else ''}"
+                f"{r.substance + '.' if r.substance else ''}{r.property}"
                 + (f"-{r.minus}" if r.minus else "") for r in unserved))
         return values
 

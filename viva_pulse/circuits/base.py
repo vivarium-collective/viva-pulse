@@ -25,7 +25,8 @@ class Request:
     """One Pulse data request, emitted at ``path`` inside its module's port tree.
 
     ``category`` is ``"physiology"``, ``"environment"``, ``"liquid_compartment"``,
-    ``"gas_compartment"``, ``"thermal_compartment"`` or ``"mechanical_ventilator"``.
+    ``"gas_compartment"``, ``"thermal_compartment"``, ``"mechanical_ventilator"``,
+    ``"substance"`` or ``"tissue_compartment"``.
     ``unit`` is ``(unit class in pulse.cdm.scalars, unit attribute)``, or None for
     unitless. Compartment property names are Pulse's own spelling: ``Pressure``,
     ``Volume``, ``Inflow``, ``Outflow`` (``SEDataRequestTracker.cpp``), and
@@ -35,6 +36,16 @@ class Request:
     With ``minus`` set, the output is ``property - minus`` on the same compartment,
     read as two Pulse requests: a compartment whose only link is one circuit path
     has ``Inflow - Outflow`` equal to that path's signed flow.
+
+    ``substance`` names a Pulse substance. With ``liquid_compartment`` or
+    ``gas_compartment`` it reads that substance's quantity in the compartment
+    (``SELiquidSubstanceQuantity``/``SEGasSubstanceQuantity`` properties such as
+    ``Concentration`` or ``PartialPressure``). Category ``"substance"`` reads a
+    whole-body ``SESubstance`` property (``MassInBody``) and has no compartment;
+    ``"tissue_compartment"`` reads an ``SETissueCompartment`` property
+    (``MatrixVolume``). Pulse activates any substance it is asked about and crashes
+    on a compartment holding no quantity for it, so callers validate names first
+    (``circuits.substances``).
     """
 
     path: tuple[str, ...]
@@ -43,10 +54,11 @@ class Request:
     unit: tuple[str, str] | None
     compartment: str | None = None
     minus: str | None = None
+    substance: str | None = None
 
     def key(self) -> tuple:
         """Identity of the underlying Pulse request; equal keys share one request."""
-        return (self.category, self.compartment, self.property, self.unit, self.minus)
+        return (self.category, self.compartment, self.property, self.unit, self.minus, self.substance)
 
     def to_pulse(self) -> list:
         """The Pulse data requests this output reads: one, or two with ``minus``."""
@@ -62,11 +74,21 @@ class Request:
         if self.category == "environment":
             return SEDataRequest.create_environment_request(property, unit=unit)
         if self.category == "liquid_compartment":
+            if self.substance:
+                return SEDataRequest.create_liquid_compartment_substance_request(
+                    self.compartment, self.substance, property, unit=unit)
             return SEDataRequest.create_liquid_compartment_request(
                 self.compartment, property, unit=unit)
         if self.category == "gas_compartment":
+            if self.substance:
+                return SEDataRequest.create_gas_compartment_substance_request(
+                    self.compartment, self.substance, property, unit=unit)
             return SEDataRequest.create_gas_compartment_request(
                 self.compartment, property, unit=unit)
+        if self.category == "substance":
+            return SEDataRequest.create_substance_request(self.substance, property, unit=unit)
+        if self.category == "tissue_compartment":
+            return SEDataRequest.create_tissue_request(self.compartment, property, unit=unit)
         if self.category == "thermal_compartment":
             return SEDataRequest.create_thermal_compartment_request(
                 self.compartment, property, unit=unit)

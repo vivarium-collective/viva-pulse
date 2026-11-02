@@ -19,6 +19,17 @@ to see waveforms; slower sampling aliases the cardiac cycle. ``Pericardium`` is
 a pressure/volume space with no blood path, so it has no flows (Pulse returns
 NaN for them).
 
+Lymph is not read, because Pulse 4.4.0 simulates none. Its ``FullCardiovascular``
+circuit has a ``Lymph`` node, 13 ``<Tissue>T1ToLymph`` paths and ``LymphToVenaCava1``,
+but each tissue-to-lymph path is a flow source with baseline 0 that nothing in the
+engine ever sets (``SetupCircuitsAndCompartments.cpp``), the node has no volume, and
+``Lymph`` is in no liquid graph, so no fluid or substance moves through it; its
+pressure equals ``VenaCava1``'s. Pulse inherited this stub from BioGears in 2017
+(BioGears later built an active lymph model). ``cardiovascular_points`` reads all of
+it (``nodes/Lymph``, ``paths/*ToLymph``, ``paths/LymphToVenaCava1``), and
+``tests/test_lymph.py`` fails if a Pulse upgrade switches it on (probe
+``substances-lymph-2026-11-01``, plan ``docs/plan/plan-substances-and-lymph.md``).
+
 Setpoints: Pulse's ``SECardiovascularMechanicsModifiers`` multipliers (1.0 =
 unmodified) and a hemorrhage. The multipliers are sent as one
 ``SECardiovascularMechanicsModification`` with ``incremental=True``. Pulse's

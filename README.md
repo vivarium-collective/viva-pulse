@@ -17,10 +17,11 @@ A [process-bigraph](https://github.com/vivarium-collective/process-bigraph) wrap
 - **Available:**
   - processes: `PulseProcess`, `PulseCircuitProcess`, `MapFluidController`;
   - composites: `pulse_hemorrhage`, `pulse_resuscitation`, and the per-circuit composites `pulse_cardiovascular`, `pulse_respiratory`, `pulse_mechanical_ventilation`, `pulse_thermal`, `pulse_supplemental_oxygen`, and `pulse_whole_body_circuits`, which runs every module on one engine.
+  - circuit modules for substance quantities and tissue values (`substances`, `tissues`), opt-in on the whole-body composites;
   - workbench studies: the investigation `pulse-hemorrhage` (a severity sweep, a fluid-resuscitation comparison and all 21 shipped patients); see [Studies in the workbench](#studies-in-the-workbench).
 
   All are tested against the real engine.
-- **Not covered:** ECMO, the bag-valve mask, inhalers and the anesthesia machine. See [docs/plan/plan-circuit-composites.md](docs/plan/plan-circuit-composites.md).
+- **Not covered:** ECMO, the bag-valve mask, inhalers and the anesthesia machine; drug dosing; lymph, which Pulse 4.4.0 doesn't simulate (see [Pulse circuits](#pulse-circuits)). See [docs/plan/plan-circuit-composites.md](docs/plan/plan-circuit-composites.md).
 
 ## Requirements
 
@@ -116,6 +117,7 @@ All use `fidelity="real-bridge"`. Each circuit is described in detail under [Pul
   - Its setpoints sit under the `setpoints` input port and are wired to `interventions/<module>/...`. Each defaults to its baseline (multipliers 1.0, hemorrhage 0.0) and is sent to Pulse only when it changes.
   - Identical requests from several modules share one Pulse request. A request Pulse cannot serve fails the load, or the update where it appears, instead of emitting NaN.
   - `model_type` selects the engine: `whole_body`, or `ventilation_mechanics`, which has the airway only (no blood or chemoreflex). Each module declares which engines it supports; `thermal`, `supplemental_oxygen` and the two `*_points` modules run on `whole_body` only.
+  - The `substances` and `tissues` modules read the substance quantities and tissue values listed in `substance_outputs` / `tissue_outputs` (see [Substances and tissues](#substances-and-tissues)).
   - The `cardiovascular_points` and `respiratory_points` modules read single circuit nodes and paths. By default they read every one. The config lists `cardiovascular_point_nodes` / `cardiovascular_point_paths` (and the `respiratory_` pair) narrow that to the names given. Pulse has no data request for a node or path, so before loading, the process adds a compartment for each node and a link for each path to the state, and reads them with ordinary requests. The simulation is unchanged: runs with and without them agree to within Pulse's own run-to-run noise (about 1e-14; identical runs in one process aren't always bit-identical).
   - Pulse allows one airway device at a time. A second one connecting makes every engine step fail, so the process raises instead: when the ventilator and oxygen are both connected, or when one connects in the same update the other disconnects. To switch devices, disconnect one update before connecting the other.
 - **`MapFluidController`**: a proportional `Step` that maps mean arterial pressure to IV infusion rate.
@@ -205,6 +207,29 @@ Region readings are instantaneous within each heartbeat. Use `interval=0.02` (Pu
 ![Pulse cardiovascular circuit](docs/images/circuit-cardio.png)
 
 *Pulse cardiovascular circuit diagram. Copyright Kitware, Inc. and Contributors, Apache License 2.0, from `engine/docs/Images/Cardiovascular/CardiovascularCircuit.png`.*
+
+**Lymph.** Pulse 4.4.0 simulates none, so it isn't reported. The circuit has a `Lymph` node and a path into it from each of 13 tissues, but those paths are flow sources fixed at 0 that nothing in the engine changes: no fluid or substance moves through lymph, even during a hemorrhage or a large infusion, and its pressure is the vena cava's. Pulse inherited this unfinished part from BioGears in 2017; BioGears later built an active lymph model that Pulse never took up. `point_reads` shows it (`nodes/Lymph`, `paths/<Tissue>T1ToLymph`), and `tests/test_lymph.py` fails if a Pulse upgrade switches it on. Details: [docs/plan/plan-substances-and-lymph.md](docs/plan/plan-substances-and-lymph.md).
+
+### Substances and tissues
+
+`substance_outputs` and `tissue_outputs` (on `pulse_cardiovascular` and `pulse_whole_body_circuits`; the `substances` and `tissues` modules on `PulseCircuitProcess`, whole_body only) read the substance quantities and tissue values you list:
+
+```python
+doc = pulse_cardiovascular(core, hemorrhage_severity=0.8,
+    substance_outputs=[
+        {"substance": "Oxygen", "compartment": "Aorta", "property": "PartialPressure", "unit": "mmHg"},
+        {"substance": "Sodium", "compartment": "BrainTissueExtracellular", "property": "Concentration", "unit": "g/L"},
+        {"substance": "Hemoglobin", "property": "MassInBlood", "unit": "g"},   # no compartment: whole body
+    ],
+    tissue_outputs=[{"compartment": "MuscleTissueExtracellular", "property": "Volume", "unit": "mL"}])
+# circuits/substances/Oxygen/Aorta/partial_pressure_mmHg, circuits/substances/Hemoglobin/body/mass_in_blood_g,
+# circuits/tissues/MuscleTissueExtracellular/volume_mL
+```
+
+- Substances: in a vascular, tissue fluid or airway compartment (`Concentration`, `Mass`, `Molarity`, `PartialPressure` for gases, `Saturation` for O2/CO2/CO, `Volume`/`VolumeFraction` in the airway, ...) or for the whole body (`MassInBody`, `MassInBlood`, `MassInTissue`, `BloodConcentration`, end-tidal values for gases). Tissues: composition constants (`BrainTissue` `MatrixVolume`, ...) and the extracellular fluid's volume, pressure and flows, or the intracellular volume. The full table is in the user docs ([Circuits](documentation/concepts/circuits.md)).
+- Names are Pulse's, units Pulse's spellings (`mmHg`, `g/L`, `mmol/L`). Every entry is checked against the patient's state when the composite is built, and a bad one raises an error naming it. That matters because Pulse itself reads NaN, segfaults (a compartment holding none of the substance) or creates and activates a misspelled substance, which then stays in saved states.
+- Only active substances: the drugs are inactive until dosed, and viva-pulse can't dose one yet. Only compartments Pulse moves substances through (the circulation, kidneys included, the airway, the tissue fluids) or parents of them: not `Ground` or the airway leaks (NaN), equipment compartments (0 or NaN while the device is off), `Lymph` or `Pericardium` (no transport; `Heart` includes the pericardium). Not offered either: whole-body `PlasmaConcentration` (Pulse computes it as mass in blood over plasma volume and calls it erroneous), `Saturation` outside blood, `Ambient`'s infinite volume, `mEq` units (Pulse converts an equivalent as a mole).
+- The readings don't change the run (tested to 1e-9).
 
 ### Respiratory circuit, alone or coupled
 
