@@ -4,6 +4,15 @@
 `ci/pulse-engine`). The body below is the original scope; where they differ, the
 implementation and the notes in this status block win.
 
+Decisions revised 2026-11-02, when main was merged into the branch:
+- `workspace-ci.yml` stays (the user's decision): Eran re-enabled it, template-syncs it (#37),
+  and it skips the engine tests (#26). It owns the workspace checks; this workflow builds Pulse
+  and runs the suite, and no longer repeats those checks.
+- protobuf: main's `>=7.35,<8` bound (#32, `test_protobuf_bound_matches_the_pulse_build`)
+  replaces the `<7.36` pin. CI still installs exactly 7.35.0.
+- The workbench pin is now a short SHA (#20), so the install check accepts the commit it prefixes.
+- No version bump here: the release is v0.8.0, done separately.
+
 Deviations, each re-checked at source when implementing:
 - The repo is public since 2026-10-23, so standard-runner minutes are free and required
   status checks are available. The cost and enforcement notes under "Cost and risk" are stale.

@@ -223,7 +223,7 @@ def test_state_with_another_environment_fails_the_load(tmp_path):
 
 def test_store_tracks_pulse():
     """Falsifies: an environment or thermal-compartment request is mis-mapped, or the
-    delta accounting is wrong. Stores after 20 one-second updates must equal an
+    store mapping is wrong. Stores after 20 one-second updates must equal an
     independent engine at the same engine time, and no value may be NaN."""
     core = build_core()
     sim = Composite({"state": pulse_thermal(core)}, core=core)

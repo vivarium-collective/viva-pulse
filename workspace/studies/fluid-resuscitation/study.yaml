@@ -119,6 +119,15 @@ expected_behavior:
   condition: both treated arms end with more blood volume and a higher MAP than the
     untreated arm
   test: tests/test_resuscitation.py::test_treated_arms_preserve_blood_volume, test_treated_arms_preserve_pressure
+visualizations:
+- name: resuscitation-response
+  address: local:FluidResuscitationResponse
+  config:
+    inputs_map:
+      time: global_time
+      mean_arterial_pressure: vitals.mean_arterial_pressure_mmHg
+      blood_volume: vitals.blood_volume_mL
+      iv_rate: interventions.iv_rate_mL_per_min
 comparative_visualizations:
 - name: map-by-arm
   title: MAP-targeted infusion slows the fall in arterial pressure
@@ -148,6 +157,15 @@ controls:
     treated arms must beat.
   expected: Final blood volume 3936 mL and MAP 84.1 mmHg, the reference run in .build-progress.md.
   observed: Blood volume 3936 mL, MAP 84.1 mmHg at 10 min; no infusion.
+  result: PASS
+- name: saline-map-90
+  kind: positive
+  hypothesis: A closed loop that does engage should measurably raise blood volume
+    and MAP above the untreated reference, confirming the treatment readout responds.
+  expected: Final blood volume and MAP above the untreated arm, with a non-zero commanded
+    infusion.
+  observed: 79.6 mL infused from t=508 s; blood volume 4014 mL (+78) and MAP 86.33
+    mmHg (+2.2) vs untreated.
   result: PASS
 robustness:
   n_replicates: 1
@@ -285,6 +303,214 @@ runs:
         source: override
     params_captured_at: '2026-10-23'
     params_source: dashboard-runner
+- name: viva_pulse.composites.hemorrhage.pulse_hemorrhage__1792956790__e5b2bc
+  status: completed
+  timestamp: 1792956806.965785
+  emitter:
+    kind: unknown
+  env_id: b0b1fa2138c7b171
+  params: '{"state_file": "StandardMale@0s.json", "compartment": "RightLeg", "severity":
+    0.8}'
+  computed_outcomes:
+    _status: store_unresolved
+  provenance:
+    params:
+      compartment:
+        value: RightLeg
+        source: override
+      n_steps:
+        value: 600
+        source: resolved
+      severity:
+        value: 0.8
+        source: override
+      state_file:
+        value: StandardMale@0s.json
+        source: override
+    params_captured_at: '2026-10-25'
+    params_source: dashboard-runner
+- name: viva_pulse.composites.hemorrhage.pulse_resuscitation__1792956807__ec15dd
+  status: completed
+  timestamp: 1792956823.7780101
+  emitter:
+    kind: unknown
+  env_id: b0b1fa2138c7b171
+  params: '{"state_file": "StandardMale@0s.json", "compartment": "RightLeg", "severity":
+    0.8, "compound": "Saline", "target_map_mmHg": 90.0, "gain": 25.0, "max_rate_mL_per_min":
+    250.0}'
+  computed_outcomes:
+    _status: store_unresolved
+  provenance:
+    params:
+      compartment:
+        value: RightLeg
+        source: override
+      compound:
+        value: Saline
+        source: override
+      gain:
+        value: 25.0
+        source: override
+      max_rate_mL_per_min:
+        value: 250.0
+        source: override
+      n_steps:
+        value: 600
+        source: resolved
+      severity:
+        value: 0.8
+        source: override
+      state_file:
+        value: StandardMale@0s.json
+        source: override
+      target_map_mmHg:
+        value: 90.0
+        source: override
+    params_captured_at: '2026-10-25'
+    params_source: dashboard-runner
+- name: viva_pulse.composites.hemorrhage.pulse_resuscitation__1792956824__9b6d0b
+  status: completed
+  timestamp: 1792956840.890035
+  emitter:
+    kind: unknown
+  env_id: b0b1fa2138c7b171
+  params: '{"state_file": "StandardMale@0s.json", "compartment": "RightLeg", "severity":
+    0.8, "compound": "Blood", "target_map_mmHg": 90.0, "gain": 25.0, "max_rate_mL_per_min":
+    250.0}'
+  computed_outcomes:
+    _status: store_unresolved
+  provenance:
+    params:
+      compartment:
+        value: RightLeg
+        source: override
+      compound:
+        value: Blood
+        source: override
+      gain:
+        value: 25.0
+        source: override
+      max_rate_mL_per_min:
+        value: 250.0
+        source: override
+      n_steps:
+        value: 600
+        source: resolved
+      severity:
+        value: 0.8
+        source: override
+      state_file:
+        value: StandardMale@0s.json
+        source: override
+      target_map_mmHg:
+        value: 90.0
+        source: override
+    params_captured_at: '2026-10-25'
+    params_source: dashboard-runner
+- name: viva_pulse.composites.hemorrhage.pulse_hemorrhage__1792957272__5fdf85
+  status: completed
+  timestamp: 1792957288.7337542
+  emitter:
+    kind: unknown
+  env_id: b0b1fa2138c7b171
+  params: '{"state_file": "StandardMale@0s.json", "compartment": "RightLeg", "severity":
+    0.8}'
+  computed_outcomes:
+    _status: store_unresolved
+  provenance:
+    params:
+      compartment:
+        value: RightLeg
+        source: override
+      n_steps:
+        value: 600
+        source: resolved
+      severity:
+        value: 0.8
+        source: override
+      state_file:
+        value: StandardMale@0s.json
+        source: override
+    params_captured_at: '2026-10-25'
+    params_source: dashboard-runner
+- name: viva_pulse.composites.hemorrhage.pulse_resuscitation__1792957289__c16334
+  status: completed
+  timestamp: 1792957305.644188
+  emitter:
+    kind: unknown
+  env_id: b0b1fa2138c7b171
+  params: '{"state_file": "StandardMale@0s.json", "compartment": "RightLeg", "severity":
+    0.8, "compound": "Saline", "target_map_mmHg": 90.0, "gain": 25.0, "max_rate_mL_per_min":
+    250.0}'
+  computed_outcomes:
+    _status: store_unresolved
+  provenance:
+    params:
+      compartment:
+        value: RightLeg
+        source: override
+      compound:
+        value: Saline
+        source: override
+      gain:
+        value: 25.0
+        source: override
+      max_rate_mL_per_min:
+        value: 250.0
+        source: override
+      n_steps:
+        value: 600
+        source: resolved
+      severity:
+        value: 0.8
+        source: override
+      state_file:
+        value: StandardMale@0s.json
+        source: override
+      target_map_mmHg:
+        value: 90.0
+        source: override
+    params_captured_at: '2026-10-25'
+    params_source: dashboard-runner
+- name: viva_pulse.composites.hemorrhage.pulse_resuscitation__1792957306__64ef68
+  status: completed
+  timestamp: 1792957322.58505
+  emitter:
+    kind: unknown
+  env_id: b0b1fa2138c7b171
+  params: '{"state_file": "StandardMale@0s.json", "compartment": "RightLeg", "severity":
+    0.8, "compound": "Blood", "target_map_mmHg": 90.0, "gain": 25.0, "max_rate_mL_per_min":
+    250.0}'
+  computed_outcomes:
+    _status: store_unresolved
+  provenance:
+    params:
+      compartment:
+        value: RightLeg
+        source: override
+      compound:
+        value: Blood
+        source: override
+      gain:
+        value: 25.0
+        source: override
+      max_rate_mL_per_min:
+        value: 250.0
+        source: override
+      n_steps:
+        value: 600
+        source: resolved
+      severity:
+        value: 0.8
+        source: override
+      state_file:
+        value: StandardMale@0s.json
+        source: override
+      target_map_mmHg:
+        value: 90.0
+        source: override
+    params_captured_at: '2026-10-25'
+    params_source: dashboard-runner
 simulation_set:
 - name: untreated-baseline
   kind: single
@@ -338,13 +564,13 @@ pipeline_gate:
     blocked_by:
     - treatment-preserves-volume-and-pressure
     evaluated_by: code
-    diverges_from_authored: false
+    diverges_from_authored: true
 last_test_run:
-  timestamp: '2026-10-23T10:25:21+00:00'
+  timestamp: '2026-10-26T20:21:13+00:00'
   passed: 7
   failed: 0
   skipped: 0
-  duration_s: 0.3421628475189209
+  duration_s: 0.4809870719909668
 claim: 'Both treated arms end with more blood volume (+78 mL) and a higher MAP (+2.2
   mmHg) than the untreated arm, but saline and whole blood are indistinguishable over
   10 minutes.
@@ -360,7 +586,7 @@ findings:
     study_tests:
     - tests/test_resuscitation.py::test_treated_arms_preserve_blood_volume
     - tests/test_resuscitation.py::test_treated_arms_preserve_pressure
-    runs: 'canonical runs: investigation run of 2026-10-23 at commit 5754940 (runs.db)'
+    runs: 'canonical runs: investigation run of 2026-10-25 at commit b4332d6 (runs.db)'
 - id: F-02
   tier: observation
   statement: The controller first infused at t = 508 s, when MAP fell below its 90
@@ -371,7 +597,44 @@ findings:
   evidence:
     study_tests:
     - tests/test_resuscitation.py::test_controller_engages_in_treated_arms
-    runs: 'canonical runs: investigation run of 2026-10-23 at commit 5754940 (runs.db)'
+    runs: 'canonical runs: investigation run of 2026-10-25 at commit b4332d6 (runs.db)'
+- id: F-03
+  tier: mechanism
+  mechanism_origin: engineered
+  statement: The improvement is produced by the engineered MapFluidController, not
+    by the fluid itself. The loop watches MAP and commands infusion only once it falls
+    below the 90 mmHg target, so the intervention is late (t=508 s) and small (79.6
+    mL); the restored volume, not the compound, drives the +78 mL / +2.2 mmHg gain.
+    This is an engineered control term added to the composite, distinct from Pulse's
+    own reflexes. The compound can't matter for volume, because Pulse adds infused
+    volume at the commanded rate whatever the compound (DrugModel.cpp, the IVToVenaCava
+    flow source) and the compound only adds its substances, so at equal rates saline
+    and whole blood add the same volume and differ only in what the fluid carries
+    (repo test tests/test_processes.py::test_infused_volume_does_not_depend_on_the_compound).
+  evidence:
+    study_tests:
+    - tests/test_resuscitation.py::test_controller_engages_in_treated_arms
+    - tests/test_resuscitation.py::test_treated_arms_preserve_blood_volume
+    runs: 'canonical runs: investigation run of 2026-10-25 at commit b4332d6 (runs.db)'
+alternative_hypotheses:
+- hypothesis: The arms look alike only because the controller never actually infuses.
+  status: excluded
+  evidence: "F-02/F-03 \u2014 the controller engaged at t=508 s and delivered 79.6\
+    \ mL in each treated arm; the treated arms beat untreated by +78 mL and +2.2 mmHg."
+- hypothesis: The treated-vs-untreated gap is within run-to-run variation.
+  status: excluded
+  evidence: Pulse is deterministic (single replicate justified); the untreated arm
+    reproduces the reference run exactly, so the +78 mL / +2.2 mmHg gap is not noise.
+- hypothesis: Whole blood should outperform saline within this 10-minute window.
+  status: excluded
+  evidence: 'Excluded for this study''s readouts (blood volume, MAP), by Pulse''s
+    construction rather than by the window: infused volume follows the commanded rate
+    whatever the compound, and the compound only adds its substances (DrugModel.cpp).
+    A direct-engine check at equal rates (100 mL/min for 300 s, 500 mL) gives blood
+    volume and MAP within 1.3e-5 of each other, while whole blood adds the 74 g of
+    hemoglobin its compound file carries and raises hematocrit 9% (tests/test_processes.py::test_infused_volume_does_not_depend_on_the_compound).
+    No duration separates them on volume; pressure differed by 1.3e-5 after 500 mL.
+    Oxygen-carrying measures separate them and are not recorded here.'
 conclusion: '## Claims
 
   The hypothesis holds (7/7 tests passed): treatment preserves blood volume and MAP.
@@ -380,17 +643,19 @@ conclusion: '## Claims
   ## Limitations
 
   With a 90 mmHg target the controller only engages in the last 92 s and infuses 79.6
-  mL, too little to separate saline from whole blood. Comparing compounds needs a
-  longer run or an earlier-engaging controller (higher target or gain).
+  mL. Saline and whole blood barely differ in this study''s readouts: in Pulse an
+  infusion adds volume at its commanded rate whatever the compound, so they differ
+  mainly in what the fluid carries (hemoglobin, hematocrit, oxygen content), which
+  these runs don''t record.
 
   '
 discovery_implications:
   followup_study_proposals:
   - id: compound-comparison
-    title: Saline vs whole blood over a longer resuscitation
-    motivation: In 10 minutes the controller infused only 79.6 mL, so the compounds
-      could not be told apart; run 30-60 min, or sweep the MAP target, to see whether
-      whole blood holds pressure better.
+    title: Saline vs whole blood on oxygen-carrying readouts
+    motivation: Pulse adds the same volume for either compound at equal rates (MAP
+      differed by 1.3e-5 after 500 mL), so compare them on hematocrit, hemoglobin
+      and arterial oxygen content instead of running longer.
 embed_visualizations:
 - name: comparative_map-by-arm
   url: workspace/studies/fluid-resuscitation/viz/comparative_map-by-arm.html

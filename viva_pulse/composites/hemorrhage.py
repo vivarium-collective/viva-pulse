@@ -8,12 +8,15 @@ from ..processes import VITALS
 _VITAL_PATHS = {name: ["vitals", name] for name in VITALS}
 
 
-def _pulse_node(state_file, compartment, compound):
+def _pulse_node(state_file, patient_file, circuit_modifiers, circuit_additions, compartment, compound):
     return {
         "_type": "process",
         "address": "local:PulseProcess",
         "config": {
             "state_file": state_file,
+            "patient_file": patient_file,
+            "circuit_modifiers": dict(circuit_modifiers or {}),
+            "circuit_additions": dict(circuit_additions or {}),
             "hemorrhage_compartment": compartment,
             "iv_compound": compound,
         },
@@ -46,6 +49,17 @@ def _emitter():
 _COMMON_PARAMETERS = {
     "state_file": {"type": "string", "default": "StandardMale@0s.json",
                    "description": "Stabilized Pulse patient state in <install>/bin/states"},
+    "patient_file": {"type": "string", "default": "StandardMale.json",
+                     "description": "Any patient instead of state_file: a name in <install>/bin/patients "
+                                    "or a path; stabilized once (about 13 s), then cached"},
+    "circuit_modifiers": {"type": "map", "default": {},
+                          "description": "Circuit path or node name -> multiplier on the value Pulse "
+                                         "initializes it with; the patient is stabilized with them "
+                                         "(about 25 s the first time, then cached)"},
+    "circuit_additions": {"type": "map", "default": {},
+                          "description": "New path name -> {source, target, resistance_mmHg_s_per_mL}: "
+                                         "a cardiovascular path added with its compartment link, as "
+                                         "a perturbation of the loaded patient"},
     "compartment": {"type": "string", "default": "RightLeg",
                     "description": "Hemorrhage site (Pulse eHemorrhage_Compartment)"},
     "severity": {"type": "float", "default": 0.8,
@@ -61,10 +75,11 @@ _COMMON_PARAMETERS = {
     default_n_steps=600,
     fidelity="real-bridge",
 )
-def pulse_hemorrhage(core=None, *, state_file="StandardMale@0s.json",
-                     compartment="RightLeg", severity=0.8):
+def pulse_hemorrhage(core=None, *, state_file="StandardMale@0s.json", patient_file="StandardMale.json",
+                     circuit_modifiers=None, circuit_additions=None, compartment="RightLeg", severity=0.8):
     return {
-        "pulse": _pulse_node(state_file, compartment, "Saline"),
+        "pulse": _pulse_node(state_file, patient_file, circuit_modifiers, circuit_additions, compartment,
+                             "Saline"),
         "interventions": {"hemorrhage_severity": severity, "iv_rate_mL_per_min": 0.0},
         "vitals": {},
         "emitter": _emitter(),
@@ -89,12 +104,16 @@ def pulse_hemorrhage(core=None, *, state_file="StandardMale@0s.json",
     default_n_steps=600,
     fidelity="real-bridge",
 )
-def pulse_resuscitation(core=None, *, state_file="StandardMale@0s.json",
-                        compartment="RightLeg", severity=0.8, compound="Saline",
+def pulse_resuscitation(core=None, *, state_file="StandardMale@0s.json", patient_file="StandardMale.json",
+                        circuit_modifiers=None, circuit_additions=None, compartment="RightLeg",
+                        severity=0.8, compound="Saline",
                         target_map_mmHg=90.0, gain=25.0, max_rate_mL_per_min=250.0):
-    doc = pulse_hemorrhage(core, state_file=state_file, compartment=compartment,
+    doc = pulse_hemorrhage(core, state_file=state_file, patient_file=patient_file,
+                           circuit_modifiers=circuit_modifiers, circuit_additions=circuit_additions,
+                           compartment=compartment,
                            severity=severity)
-    doc["pulse"] = _pulse_node(state_file, compartment, compound)
+    doc["pulse"] = _pulse_node(state_file, patient_file, circuit_modifiers, circuit_additions,
+                               compartment, compound)
     doc["controller"] = {
         "_type": "step",
         "address": "local:MapFluidController",

@@ -4,8 +4,10 @@ name: pulse-engine-ci
 # release for this pin, so the engine is built from source (1-2 h) once per
 # toolchain and cached; later runs restore the install and take minutes.
 #
-# This replaces the viva-template workspace-ci.yml, which ran the tests with no
-# Pulse at all. It carries no viva-template provenance stamp on purpose:
+# It runs alongside the viva-template workspace-ci.yml, which skips the engine
+# tests and carries the workspace checks (local paths, lint, README and
+# workflow freshness, publish render), so they are not repeated here. It
+# carries no viva-template provenance stamp on purpose:
 # scripts/check-workflow-freshness.py only checks stamped workflows.
 #
 # Actions caches are scoped per branch: a PR reads its own and main's entries,
@@ -53,9 +55,6 @@ jobs:
     timeout-minutes: 240
     steps:
       - uses: actions/checkout@v6
-
-      - name: Check for leaked local paths
-        run: bash scripts/check-no-local-paths.sh
 
       - uses: actions/setup-java@v6
         with:
@@ -147,7 +146,9 @@ jobs:
           with open("pyproject.toml", "rb") as f:
               pinned = tomllib.load(f)["tool"]["uv"]["sources"]["vivarium-workbench"]["rev"]
           vcs = json.loads(md.distribution("vivarium-workbench").read_text("direct_url.json"))["vcs_info"]
-          assert vcs["commit_id"] == pinned, (vcs, pinned)
+          # The pin may be a short SHA: check uv installed that exact rev, and the
+          # commit it resolved to.
+          assert vcs.get("requested_revision") == pinned and vcs["commit_id"].startswith(pinned), (vcs, pinned)
           print("protobuf", google.protobuf.__version__, "| vivarium-workbench", vcs["commit_id"])
           EOF
 
@@ -156,18 +157,6 @@ jobs:
       - name: Verify the restored install
         if: steps.cache.outputs.cache-hit == 'true'
         run: .venv/bin/python .github/scripts/verify-pulse-install.py "$PULSE_INSTALL_DIR"
-
-      - name: Lint workspace
-        run: .venv/bin/python scripts/lint-workspace.py
-
-      - name: Check README generated tables are fresh (non-blocking)
-        run: |
-          if ! .venv/bin/vivarium-workbench gen-readme --workspace . --check; then
-            echo "::warning title=Stale README tables::Run 'vivarium-workbench gen-readme --workspace .' and commit."
-          fi
-
-      - name: Check generated workflows are fresh vs viva-template
-        run: .venv/bin/python scripts/check-workflow-freshness.py --check
 
       - name: Run the tests
         run: .venv/bin/python -m pytest tests/ -rA --color=yes --junitxml=pytest-results.xml
@@ -194,10 +183,3 @@ jobs:
         with:
           name: pytest-results
           path: pytest-results.xml
-
-      # Last: it reinstalls vivarium-workbench at main, as the dashboard deploy
-      # (publish-dashboard.yml) does, so a study that would 404 fails here.
-      - name: Publish render check (no study would 404)
-        run: |
-          uv pip install --python .venv --reinstall-package vivarium-workbench "vivarium-workbench @ git+https://github.com/vivarium-collective/vivarium-workbench.git@main"
-          .venv/bin/vivarium-workbench-publish --workspace . --out "$RUNNER_TEMP/render-check"

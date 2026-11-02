@@ -19,10 +19,6 @@ setpoint
 : An input store that holds the value an intervention should have, such as
   `hemorrhage_severity`. viva-pulse sends it to Pulse as an action only when it changes.
 
-delta port
-: An output that carries the change since the last update rather than the value. Seeded with
-  the reading at load, the store it writes to always equals Pulse's own value.
-
 circuit module
 : A declarative description of one Pulse circuit family (cardiovascular, respiratory,
   mechanical ventilator, thermal, supplemental oxygen): which Pulse values become its

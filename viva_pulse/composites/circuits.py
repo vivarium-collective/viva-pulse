@@ -9,6 +9,7 @@ Store layout:
 
 from process_bigraph.composite_generator import composite_generator
 
+from ..circuits import MODULES
 from ..circuits.cardiovascular import CARDIOVASCULAR, HEMORRHAGE_COMPARTMENTS, MULTIPLIERS
 from ..circuits.respiratory import (
     INTUBATION_TYPES, MECHANICAL_VENTILATOR, MULTIPLIERS as RESPIRATORY_MULTIPLIERS, RESPIRATORY,
@@ -19,13 +20,16 @@ from ..core import register_processes
 
 
 def circuit_node(modules, *, model_type="whole_body", state_file="StandardMale@0s.json",
-                 patient_file="StandardMale.json", interval=1.0, **params):
+                 patient_file="StandardMale.json", circuit_modifiers=None,
+                 circuit_additions=None, interval=1.0, **params):
     """A ``PulseCircuitProcess`` node wired to the standard store layout."""
     return {
         "_type": "process",
         "address": "local:PulseCircuitProcess",
         "config": {"model_type": model_type, "modules": list(modules),
-                   "state_file": state_file, "patient_file": patient_file, **params},
+                   "state_file": state_file, "patient_file": patient_file,
+                   "circuit_modifiers": dict(circuit_modifiers or {}),
+                   "circuit_additions": dict(circuit_additions or {}), **params},
         "interval": interval,
         "inputs": {"setpoints": ["interventions"]},
         "outputs": {**{name: ["circuits", name] for name in modules},
@@ -73,9 +77,36 @@ _INTERVAL = {"type": "float", "default": 1.0,
                             "waveforms. A non-binary-exact interval can lose the final update of a run "
                             "to float time accumulation."}
 _STATE_FILE = {"type": "string", "default": "StandardMale@0s.json",
-               "description": "Stabilized Pulse patient state in <install>/bin/states (whole_body only)"}
+               "description": "Stabilized Pulse patient state in <install>/bin/states (whole_body only; "
+                              "set this or patient_file, not both)"}
 _PATIENT_FILE = {"type": "string", "default": "StandardMale.json",
-                 "description": "Patient in <install>/bin/patients (ventilation_mechanics only)"}
+                 "description": "Patient in <install>/bin/patients (on whole_body, also a path). "
+                                "ventilation_mechanics starts from it; on whole_body it replaces "
+                                "state_file, stabilized once (about 13 s) and then cached"}
+_CIRCUIT_MODIFIERS = {"type": "map", "default": {},
+                      "description": "Circuit path or node name -> multiplier on the resistance, "
+                                     "compliance or volume Pulse initializes it with (whole_body only). "
+                                     "The patient is stabilized with them (about 25 s the first time, "
+                                     "then cached), so the rest of the body adapts: a different "
+                                     "patient, not a perturbation"}
+_CIRCUIT_ADDITIONS = {"type": "map", "default": {},
+                      "description": "New path name -> {source, target, resistance_mmHg_s_per_mL}: a "
+                                     "resistance path between two FullCardiovascular nodes in "
+                                     "different compartments, added with its compartment link so "
+                                     "substances follow (whole_body only). A perturbation: the body "
+                                     "responds over time"}
+_POINT_READS = {"type": "boolean", "default": False,
+                "description": "Also read every node and path of the circuit drawing (whole_body only), "
+                               "under circuits/<circuit>_points/"}
+
+
+def _with_points(modules, point_reads, model_type):
+    """``modules`` plus each one's ``<name>_points`` module when ``point_reads`` is set."""
+    if not point_reads:
+        return list(modules)
+    if model_type != "whole_body":
+        raise ValueError(f"point_reads needs model_type 'whole_body', got {model_type!r}")
+    return [*modules, *(f"{name}_points" for name in modules if f"{name}_points" in MODULES)]
 
 
 _CARDIOVASCULAR_PARAMETERS = {
@@ -97,7 +128,11 @@ _CARDIOVASCULAR_PARAMETERS = {
         "model_type": {"type": "string", "default": "whole_body", "choices": ["whole_body"],
                        "description": "Pulse engine running the circuit"},
         "state_file": _STATE_FILE,
+        "patient_file": _PATIENT_FILE,
+        "circuit_modifiers": _CIRCUIT_MODIFIERS,
+        "circuit_additions": _CIRCUIT_ADDITIONS,
         "interval": _INTERVAL,
+        "point_reads": _POINT_READS,
         **_CARDIOVASCULAR_PARAMETERS,
     },
     core_extensions=[register_processes],
@@ -105,14 +140,19 @@ _CARDIOVASCULAR_PARAMETERS = {
     fidelity="real-bridge",
 )
 def pulse_cardiovascular(core=None, *, model_type="whole_body", state_file="StandardMale@0s.json",
-                         interval=1.0, hemorrhage_compartment="RightLeg", **overrides):
+                         patient_file="StandardMale.json", circuit_modifiers=None,
+                         circuit_additions=None, interval=1.0, point_reads=False,
+                         hemorrhage_compartment="RightLeg", **overrides):
     config = {"hemorrhage_compartment": hemorrhage_compartment}
     CARDIOVASCULAR.check_config(config)
     setpoints = _setpoints(CARDIOVASCULAR, overrides, config)
     _reject_unknown(overrides)
     return {
-        "pulse": circuit_node(["cardiovascular"], model_type=model_type, state_file=state_file,
-                              interval=interval, hemorrhage_compartment=hemorrhage_compartment),
+        "pulse": circuit_node(_with_points(["cardiovascular"], point_reads, model_type), model_type=model_type,
+                              state_file=state_file, patient_file=patient_file,
+                              circuit_modifiers=circuit_modifiers,
+                              circuit_additions=circuit_additions, interval=interval,
+                              hemorrhage_compartment=hemorrhage_compartment),
         "interventions": {"cardiovascular": setpoints},
         "circuits": {},
         "emitter": circuit_emitter(),
@@ -125,8 +165,11 @@ _RESPIRATORY_PARAMETERS = {
                    "description": "ventilation_mechanics = the airway circuit alone (no blood, no "
                                   "chemoreflex); whole_body = coupled to the rest of the body"},
     "patient_file": _PATIENT_FILE,
+    "circuit_modifiers": _CIRCUIT_MODIFIERS,
+    "circuit_additions": _CIRCUIT_ADDITIONS,
     "state_file": _STATE_FILE,
     "interval": _INTERVAL,
+    "point_reads": _POINT_READS,
     **_multiplier_parameters(RESPIRATORY_MULTIPLIERS, "respiratory"),
     "intubation_type": {"type": "string", "default": "Tracheal", "choices": list(INTUBATION_TYPES),
                         "description": "Tube placement used when intubated = 1"},
@@ -148,15 +191,18 @@ _RESPIRATORY_PARAMETERS = {
     fidelity="real-bridge",
 )
 def pulse_respiratory(core=None, *, model_type="ventilation_mechanics", patient_file="StandardMale.json",
-                      state_file="StandardMale@0s.json", interval=1.0, intubation_type="Tracheal",
-                      **overrides):
+                      circuit_modifiers=None, circuit_additions=None,
+                      state_file="StandardMale@0s.json", interval=1.0, point_reads=False,
+                      intubation_type="Tracheal", **overrides):
     config = {"intubation_type": intubation_type}
     RESPIRATORY.check_config(config)
     setpoints = _setpoints(RESPIRATORY, overrides, config)
     _reject_unknown(overrides)
+    modules = _with_points(["respiratory"], point_reads, model_type)
     return {
-        "pulse": circuit_node(["respiratory"], model_type=model_type, state_file=state_file,
-                              patient_file=patient_file, interval=interval,
+        "pulse": circuit_node(modules, model_type=model_type, state_file=state_file,
+                              patient_file=patient_file, circuit_modifiers=circuit_modifiers,
+                              circuit_additions=circuit_additions, interval=interval,
                               intubation_type=intubation_type),
         "interventions": {"respiratory": setpoints},
         "circuits": {},
@@ -184,8 +230,9 @@ def pulse_respiratory(core=None, *, model_type="ventilation_mechanics", patient_
     fidelity="real-bridge",
 )
 def pulse_mechanical_ventilation(core=None, *, model_type="ventilation_mechanics",
-                                 patient_file="StandardMale.json", state_file="StandardMale@0s.json",
-                                 interval=1.0, intubation_type="Tracheal",
+                                 patient_file="StandardMale.json",
+                                 circuit_modifiers=None, circuit_additions=None, state_file="StandardMale@0s.json",
+                                 interval=1.0, point_reads=False, intubation_type="Tracheal",
                                  ventilator_mode="AssistedControl", **overrides):
     overrides.setdefault("intubated", 1.0)
     overrides.setdefault("connected", 1.0)
@@ -196,8 +243,11 @@ def pulse_mechanical_ventilation(core=None, *, model_type="ventilation_mechanics
     ventilator = _setpoints(MECHANICAL_VENTILATOR, overrides, config)
     _reject_unknown(overrides)
     return {
-        "pulse": circuit_node(["respiratory", "mechanical_ventilator"], model_type=model_type,
-                              state_file=state_file, patient_file=patient_file, interval=interval,
+        "pulse": circuit_node(_with_points(["respiratory", "mechanical_ventilator"], point_reads, model_type),
+                              model_type=model_type,
+                              state_file=state_file, patient_file=patient_file,
+                              circuit_modifiers=circuit_modifiers,
+                              circuit_additions=circuit_additions, interval=interval,
                               **config),
         "interventions": {"respiratory": respiratory, "mechanical_ventilator": ventilator},
         "circuits": {},
@@ -235,6 +285,9 @@ _THERMAL_DESCRIPTIONS = {
         "model_type": {"type": "string", "default": "whole_body", "choices": ["whole_body"],
                        "description": "Pulse engine running the circuit"},
         "state_file": _STATE_FILE,
+        "patient_file": _PATIENT_FILE,
+        "circuit_modifiers": _CIRCUIT_MODIFIERS,
+        "circuit_additions": _CIRCUIT_ADDITIONS,
         "interval": _INTERVAL,
         **{port: {"type": "float", "default": value, "description": _THERMAL_DESCRIPTIONS[port]}
            for port, value in {**ENVIRONMENT_BASELINE, **THERMAL_APPLICATION_BASELINE}.items()},
@@ -244,12 +297,14 @@ _THERMAL_DESCRIPTIONS = {
     fidelity="real-bridge",
 )
 def pulse_thermal(core=None, *, model_type="whole_body", state_file="StandardMale@0s.json",
-                  interval=1.0, **overrides):
+                  patient_file="StandardMale.json", circuit_modifiers=None,
+                  circuit_additions=None, interval=1.0, **overrides):
     setpoints = _setpoints(THERMAL, overrides, {})
     _reject_unknown(overrides)
     return {
         "pulse": circuit_node(["thermal"], model_type=model_type, state_file=state_file,
-                              interval=interval),
+                              patient_file=patient_file, circuit_modifiers=circuit_modifiers,
+                              circuit_additions=circuit_additions, interval=interval),
         "interventions": {"thermal": setpoints},
         "circuits": {},
         "emitter": circuit_emitter(),
@@ -276,6 +331,9 @@ _OXYGEN_FLOW_PARAMETER = {
         "model_type": {"type": "string", "default": "whole_body", "choices": ["whole_body"],
                        "description": "Pulse engine running the circuits"},
         "state_file": _STATE_FILE,
+        "patient_file": _PATIENT_FILE,
+        "circuit_modifiers": _CIRCUIT_MODIFIERS,
+        "circuit_additions": _CIRCUIT_ADDITIONS,
         "interval": _INTERVAL,
         **_OXYGEN_DEVICE_PARAMETER,
         "oxygen_connected": {"type": "float", "default": 1.0,
@@ -287,7 +345,9 @@ _OXYGEN_FLOW_PARAMETER = {
     fidelity="real-bridge",
 )
 def pulse_supplemental_oxygen(core=None, *, model_type="whole_body", state_file="StandardMale@0s.json",
-                              interval=1.0, oxygen_device="NasalCannula", **overrides):
+                              patient_file="StandardMale.json", circuit_modifiers=None,
+                              circuit_additions=None, interval=1.0,
+                              oxygen_device="NasalCannula", **overrides):
     overrides.setdefault("oxygen_connected", 1.0)
     config = {"oxygen_device": oxygen_device, "intubation_type": "Tracheal"}
     SUPPLEMENTAL_OXYGEN.check_config(config)
@@ -295,7 +355,10 @@ def pulse_supplemental_oxygen(core=None, *, model_type="whole_body", state_file=
     _reject_unknown(overrides)
     return {
         "pulse": circuit_node(["respiratory", "supplemental_oxygen"], model_type=model_type,
-                              state_file=state_file, interval=interval, oxygen_device=oxygen_device),
+                              state_file=state_file, patient_file=patient_file,
+                              circuit_modifiers=circuit_modifiers,
+                              circuit_additions=circuit_additions, interval=interval,
+                              oxygen_device=oxygen_device),
         "interventions": {"respiratory": _setpoints(RESPIRATORY, {}, config),
                           "supplemental_oxygen": oxygen},
         "circuits": {},
@@ -317,10 +380,15 @@ WHOLE_BODY_MODULES = (CARDIOVASCULAR, RESPIRATORY, MECHANICAL_VENTILATOR, THERMA
         "model_type": {"type": "string", "default": "whole_body", "choices": ["whole_body"],
                        "description": "Pulse engine running the circuits"},
         "state_file": _STATE_FILE,
+        "patient_file": _PATIENT_FILE,
+        "circuit_modifiers": _CIRCUIT_MODIFIERS,
+        "circuit_additions": _CIRCUIT_ADDITIONS,
         "interval": _INTERVAL,
+        "point_reads": _POINT_READS,
         **_CARDIOVASCULAR_PARAMETERS,
         **{k: v for k, v in _RESPIRATORY_PARAMETERS.items()
-           if k not in ("model_type", "patient_file", "state_file", "interval")},
+           if k not in ("model_type", "patient_file", "circuit_modifiers", "circuit_additions",
+                         "state_file", "interval", "point_reads")},
         "intubated": {"type": "float", "default": 0.0, "description": "1 = intubated, 0 = not"},
         "ventilator_mode": {"type": "string", "default": "AssistedControl", "choices": list(VENTILATOR_MODES),
                             "description": "Pressure-control mode"},
@@ -338,7 +406,9 @@ WHOLE_BODY_MODULES = (CARDIOVASCULAR, RESPIRATORY, MECHANICAL_VENTILATOR, THERMA
     fidelity="real-bridge",
 )
 def pulse_whole_body_circuits(core=None, *, model_type="whole_body", state_file="StandardMale@0s.json",
-                              interval=1.0, hemorrhage_compartment="RightLeg", intubation_type="Tracheal",
+                              patient_file="StandardMale.json",
+                              circuit_modifiers=None, circuit_additions=None, interval=1.0, point_reads=False,
+                              hemorrhage_compartment="RightLeg", intubation_type="Tracheal",
                               ventilator_mode="AssistedControl", oxygen_device="NasalCannula", **overrides):
     config = {"hemorrhage_compartment": hemorrhage_compartment, "intubation_type": intubation_type,
               "ventilator_mode": ventilator_mode, "oxygen_device": oxygen_device}
@@ -352,8 +422,11 @@ def pulse_whole_body_circuits(core=None, *, model_type="whole_body", state_file=
     if len(connected) > 1:
         raise ValueError(f"only one airway device can be connected at a time, got {connected}")
     return {
-        "pulse": circuit_node([module.name for module in WHOLE_BODY_MODULES], model_type=model_type,
-                              state_file=state_file, interval=interval, **config),
+        "pulse": circuit_node(_with_points([module.name for module in WHOLE_BODY_MODULES], point_reads, model_type),
+                              model_type=model_type, state_file=state_file, patient_file=patient_file,
+                              circuit_modifiers=circuit_modifiers,
+                              circuit_additions=circuit_additions,
+                              interval=interval, **config),
         "interventions": interventions,
         "circuits": {},
         "emitter": circuit_emitter(),

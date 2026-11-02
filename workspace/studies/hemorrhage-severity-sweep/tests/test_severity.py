@@ -39,11 +39,22 @@ def test_heart_rate_rises_with_severity(grid):
     assert all(a < b for a, b in zip(rates, rates[1:])), rates
 
 
+def _largest_deviation(run, observable):
+    """Largest distance of any recorded sample (1 s apart) from the run's first one."""
+    series = run.observable(observable)
+    return max(abs(x - series[0]) for x in series)
+
+
 @pytest.mark.usefixtures("grid")
 @pytest.mark.parametrize("severity", ["0.2", "0.4"])
 def test_pressure_held_for_mild_bleeds(latest, severity):
-    run = latest[f"severity-{severity}"]
-    assert abs(run.final(MAP) - run.initial(MAP)) < 2.0
+    """Every sample, not just the last, stays within 2 mmHg of the start."""
+    assert _largest_deviation(latest[f"severity-{severity}"], MAP) < 2.0
+
+
+@pytest.mark.usefixtures("grid")
+def test_pressure_leaves_the_band_from_severity_0_6(latest):
+    assert _largest_deviation(latest["severity-0.6"], MAP) > 2.0
 
 
 @pytest.mark.usefixtures("grid")

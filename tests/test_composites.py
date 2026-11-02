@@ -13,8 +13,8 @@ def test_generator_is_registered(name):
 
 
 def test_first_emitted_row_carries_loaded_vitals(run_composite):
-    # Regression: with overwrite[float] output ports, process-bigraph dropped
-    # initial_state() and the t=0 row was all zeros.
+    """Falsifies: the t=0 row doesn't carry the loaded state. Before 1.10.1 (#268),
+    process-bigraph dropped initial_state() on overwrite[float] ports and it was all zeros."""
     _, rows = run_composite(pulse_hemorrhage, 1.0)
     first = rows[0]
     assert first["time"] == 0.0
@@ -24,6 +24,8 @@ def test_first_emitted_row_carries_loaded_vitals(run_composite):
 
 
 def test_hemorrhage_composite_stores_track_the_engine(run_composite):
+    """Falsifies: the stores don't hold Pulse's reading while it changes: an update
+    emitting deltas into the overwrite ports, or absolute readings into additive ones."""
     sim, rows = run_composite(pulse_hemorrhage, 120.0)
     assert len(rows) == 121
     truth = sim.state["pulse"]["instance"]._read_vitals()

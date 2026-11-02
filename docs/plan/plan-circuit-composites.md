@@ -193,7 +193,7 @@ Probe scripts live in the scratchpad and run with `uv run --no-sync`. **Every He
   - recorded deviations;
   - the settings test now uses non-default PIP, PEEP, rate, inspiratory period and FiO2, and is shown to fail when each is hard-coded;
   - new tests: reconnect, settle exhaustion, missing patient file, and start file ignored by the engine;
-  - documented: `max_settle_s` can't be 0, and row 0 is pre-ventilation;
+  - documented: `max_settle_s` can't be 0 (superseded 2026-10-25: bigraph-schema 1.8.3 keeps an explicit 0.0, meaning no settling), and row 0 is pre-ventilation;
   - figures reconciled; runtime updated.
 
   The two research sections below are kept here, with their verification status, as planning input.

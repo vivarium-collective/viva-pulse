@@ -1,7 +1,15 @@
 # viva-pulse
 
-[![Documentation](https://readthedocs.org/projects/viva-pulse/badge/?version=latest)](https://viva-pulse.readthedocs.io/en/latest/)
 [![pulse-engine-ci](https://github.com/vivarium-collective/viva-pulse/actions/workflows/pulse-engine-ci.yml/badge.svg)](https://github.com/vivarium-collective/viva-pulse/actions/workflows/pulse-engine-ci.yml)
+<!-- BEGIN:badges -->
+[![CI](https://github.com/vivarium-collective/viva-pulse/actions/workflows/workspace-ci.yml/badge.svg)](https://github.com/vivarium-collective/viva-pulse/actions/workflows/workspace-ci.yml)
+[![read-only workbench](https://img.shields.io/badge/read--only_workbench-live-2ea44f)](https://vivarium-collective.github.io/viva-pulse/workbench/)
+[![license](https://img.shields.io/github/license/vivarium-collective/viva-pulse)](./LICENSE)
+<!-- END:badges -->
+
+<!-- BEGIN:dashboard -->
+**[Open the read-only workbench](https://vivarium-collective.github.io/viva-pulse/workbench/)** to browse every composite, study, and result in your browser — or run it locally below.
+<!-- END:dashboard -->
 
 A [process-bigraph](https://github.com/vivarium-collective/process-bigraph) wrapper that drives the **real** [Kitware Pulse Physiology Engine](https://gitlab.kitware.com/physiology/engine) (whole-body adult model). Pulse runs as a time-stepped `Process`. Interventions are input ports, vital signs are output ports, and simulations are ordinary `process_bigraph.Composite` documents. Nothing is reimplemented or mocked: every number comes from Pulse's C++ engine through its own Python bindings.
 
@@ -41,7 +49,9 @@ uv pip install -e '.[dev]'
 
 `-DPython3_EXECUTABLE` is ignored by Pulse's CMake; the venv is selected with `-DPulse_PYTHON_HOME_DIR` together with `VIRTUAL_ENV`. Build pins and known workarounds are in [.build-progress.md](.build-progress.md).
 
-**Never run `uv sync`.** The venv is assembled by hand, and a sync would resolve protobuf away from the version Pulse generated its bindings with. It would also remove the dev and engine requirements. Run everything with `uv run --no-sync`.
+`[dev]` adds pytest and the `workbench` extra: the workbench and what the studies, figures and reports use. The library itself (the processes and composites) needs neither, so another project can depend on viva-pulse without extras.
+
+**Never run `uv sync`.** The venv is assembled by hand, and a sync would write a lock file and remove the dev extra and the engine requirements. Run everything with `uv run --no-sync`.
 
 ### Finding the Pulse install
 
@@ -69,38 +79,109 @@ rows = gather_emitter_results(sim)[("emitter",)]
 
 ### Composites
 
-| Generator | What it runs |
-|---|---|
-| `pulse_hemorrhage` | Untreated hemorrhage at a chosen compartment and severity. Emits vital signs every second. |
-| `pulse_resuscitation` | The same hemorrhage plus a closed-loop IV fluid controller that targets mean arterial pressure. |
-| `pulse_cardiovascular` | The cardiovascular circuit, including its renal and tissue branches. Emits pressure, volume, inflow and outflow for 32 vascular regions, plus 20 hemodynamic values. Driven by Pulse's resistance and compliance multipliers and a hemorrhage. |
-| `pulse_respiratory` | The respiratory (airway) circuit, either alone in Pulse's ventilation-mechanics engine (default) or coupled in the whole-body engine. Emits 24 breathing-mechanics values plus pressure, volume, inflow and outflow for 8 lung and pleural regions. Driven by Pulse's 10 respiratory resistance and compliance multipliers and intubation. |
-| `pulse_mechanical_ventilation` | The same, with a pressure-control mechanical ventilator connected, plus the ventilator's 18 monitor values. Defaults follow Kitware's HowTo: intubated, AC mode, 19/5 cmH2O, 12 breaths/min. Settings, including `connected`, can change mid-run. |
-| `pulse_thermal` | The temperature circuit: core and skin joined to clothing, enclosure and ambient air. Emits core and skin temperature, sweat rate, metabolic rate, 8 heat-loss values, the environmental conditions as Pulse applies them, and temperature (7 regions) and heat flow (8 regions) for the thermal regions. Driven by the environment (air, radiant and breathed-air temperature, humidity, air speed, clothing) and by active heating, active cooling or an applied skin temperature. |
-| `pulse_supplemental_oxygen` | Supplemental oxygen through a nasal cannula, simple mask or non-rebreather mask, from a wall supply, combined with the respiratory circuit. Emits breathing mechanics, lung regions, inspired oxygen fraction and arterial blood gases. Oxygen can be switched on and off, and its flow changed, mid-run. |
-| `pulse_whole_body_circuits` | Every module on one whole-body engine: cardiovascular, respiratory, mechanical ventilator, thermal and supplemental oxygen, 269 readings per row. Takes every module's parameters; the ventilator and oxygen start disconnected. Shows effects that cross circuits, such as oxygen slowing the heart. |
+<!-- BEGIN:composites -->
+<!-- generated by `vivarium-workbench gen-readme` — edit the source, not this table -->
 
-All use `fidelity="real-bridge"`.
+| Composite | What it is |
+|---|---|
+| `pulse_cardiovascular` | The Pulse cardiovascular circuit (with its renal and tissue branches) in the real whole-body engine: per-compartment pressures, volumes and flows plus hemodynamic vitals, driven by circuit resistance… |
+| `pulse_hemorrhage` | Untreated hemorrhage in the real Pulse whole-body adult engine; emits vital signs every second. |
+| `pulse_mechanical_ventilation` | A patient on a pressure-control mechanical ventilator in the real Pulse engine: the respiratory circuit combined with the ventilator circuit, emitting breathing mechanics, lung compartments and the v… |
+| `pulse_respiratory` | The Pulse respiratory (airway) circuit, alone in the VentilationMechanics engine or coupled in the whole-body engine: breathing mechanics plus per-compartment lung and pleural pressures, volumes and… |
+| `pulse_resuscitation` | Hemorrhage in the real Pulse engine with a closed-loop MAP-targeted IV fluid controller. |
+| `pulse_supplemental_oxygen` | Supplemental oxygen (nasal cannula, simple mask or non-rebreather mask) in the real whole-body engine: the device circuit combined with the respiratory circuit, emitting breathing mechanics, lung com… |
+| `pulse_thermal` | The Pulse temperature circuit (internal core/skin joined to clothing, enclosure and ambient air) in the real whole-body engine: core and skin temperature, sweat, metabolic rate, heat-loss rates and p… |
+| `pulse_whole_body_circuits` | Every circuit module on one real whole-body Pulse engine: cardiovascular (with renal and tissue branches), respiratory, mechanical ventilator, thermal and supplemental oxygen, so effects that cross c… |
+<!-- END:composites -->
+
+All use `fidelity="real-bridge"`. Each circuit is described in detail under [Pulse circuits](#pulse-circuits) below.
+
+- **Point reads.** `point_reads=True` on `pulse_cardiovascular`, `pulse_respiratory`, `pulse_mechanical_ventilation` (these two with `model_type="whole_body"`) or `pulse_whole_body_circuits` adds every node and path of the circuit drawings. Each node, e.g. `LeftHeart1`, gets its pressure and, where it holds one, its volume. Each path, e.g. `Aorta1ToBone1`, gets its signed flow. They appear under `circuits/cardiovascular_points/` and `circuits/respiratory_points/`. In every shipped state, the cardiovascular circuit has 124 nodes and 212 paths, and the respiratory one 24 nodes and 34 paths. Two exceptions:
+  - Paths Pulse adds during a run, such as a hemorrhage's bleed path, aren't included.
+  - With a ventilator or oxygen module on the same engine, the two airway openings are left out, because Pulse stops solving them while a device is connected.
 
 - **Whole-body runs** load Pulse's stabilized state files (`<install>/bin/states/*.json`, default `StandardMale@0s.json`).
-- **Ventilation-mechanics runs** have no state files. They start from a patient file (`<install>/bin/patients/*.json`, default `StandardMale.json`), then settle before t=0 until every requested value is defined, which takes about one breath.
-- Setting the file the chosen engine doesn't use (a `state_file` on ventilation-mechanics, a `patient_file` on whole-body) raises an error instead of being ignored.
+- **Any other patient** runs on the whole body through `patient_file` instead of `state_file` (see [Any patient](#any-patient)). Setting both raises an error.
+- **Ventilation-mechanics runs** have no state files. They start from a patient file (`<install>/bin/patients/*.json`, default `StandardMale.json`), then settle before t=0 until every requested value is defined, which takes about one breath. A `state_file` on ventilation-mechanics raises an error instead of being ignored.
 - Setpoints apply from the first update. In `pulse_mechanical_ventilation`, the patient settles breathing spontaneously, so row 0 shows the ventilator monitor at 0 even though `interventions` say `connected=1`. The monitor values appear once the first ventilated breath completes, a few seconds in.
 - In `AssistedControl` mode, a ventilator rate above the patient's own can lock Pulse into auto-triggering (about 50 breaths/min with high intrinsic PEEP). This is Pulse's own behavior and reproduces through its API alone. Use `ContinuousMandatoryVentilation` when the set rate must hold.
 
 ### Processes
 
 - **`PulseProcess`**:
-  - Loads a stabilized Pulse state and advances the engine by `interval` seconds per update.
+  - Loads a stabilized Pulse state (`state_file`, or any patient through `patient_file`) and advances the engine by `interval` seconds per update.
   - Inputs `hemorrhage_severity` and `iv_rate_mL_per_min` are setpoints, sent to Pulse as actions only when they change.
-  - Outputs are nine vital signs plus an `irreversible_state` flag. Vitals are `float` ports carrying deltas, seeded with the loaded readings, so each store always equals Pulse's own value. The reason for this design is in `.build-progress.md`.
+  - Outputs are nine vital signs plus an `irreversible_state` flag. Vitals are `overwrite[float]` ports carrying Pulse's current reading, seeded with the loaded readings, so each store always equals Pulse's own value.
 - **`PulseCircuitProcess`**: one real Pulse engine exposing the circuit modules named in `config.modules` (see `viva_pulse/circuits/`).
-  - Each module's readings are a nested subtree of `float` delta ports. For example, `cardiovascular/central/aorta/pressure_mmHg` is wired to `circuits/cardiovascular/...`.
+  - Each module's readings are a nested subtree of `overwrite[float]` ports. For example, `cardiovascular/central/aorta/pressure_mmHg` is wired to `circuits/cardiovascular/...`.
   - Its setpoints sit under the `setpoints` input port and are wired to `interventions/<module>/...`. Each defaults to its baseline (multipliers 1.0, hemorrhage 0.0) and is sent to Pulse only when it changes.
   - Identical requests from several modules share one Pulse request. A request Pulse cannot serve fails the load, or the update where it appears, instead of emitting NaN.
-  - `model_type` selects the engine: `whole_body`, or `ventilation_mechanics`, which has the airway only (no blood or chemoreflex). Each module declares which engines it supports; `thermal` and `supplemental_oxygen` run on `whole_body` only.
+  - `model_type` selects the engine: `whole_body`, or `ventilation_mechanics`, which has the airway only (no blood or chemoreflex). Each module declares which engines it supports; `thermal`, `supplemental_oxygen` and the two `*_points` modules run on `whole_body` only.
+  - The `cardiovascular_points` and `respiratory_points` modules read single circuit nodes and paths. By default they read every one. The config lists `cardiovascular_point_nodes` / `cardiovascular_point_paths` (and the `respiratory_` pair) narrow that to the names given. Pulse has no data request for a node or path, so before loading, the process adds a compartment for each node and a link for each path to the state, and reads them with ordinary requests. The simulation is unchanged: runs with and without them agree to within Pulse's own run-to-run noise (about 1e-14; identical runs in one process aren't always bit-identical).
   - Pulse allows one airway device at a time. A second one connecting makes every engine step fail, so the process raises instead: when the ventilator and oxygen are both connected, or when one connects in the same update the other disconnects. To switch devices, disconnect one update before connecting the other.
 - **`MapFluidController`**: a proportional `Step` that maps mean arterial pressure to IV infusion rate.
+
+### Any patient
+
+Pulse ships stabilized states for 21 of its patients. To run any other patient on the whole-body engine, pass a Pulse patient file as `patient_file` (to `PulseProcess`, to `PulseCircuitProcess` with `model_type: whole_body`, or to any composite that takes `state_file`), and leave `state_file` at its default:
+
+```python
+doc = pulse_hemorrhage(core, patient_file="my_patients/Athlete.json", severity=0.5)
+```
+
+- A bare name (`"Gus.json"`) is a file in `<install>/bin/patients/`; anything containing a path separator is a path, relative to the working directory, so a patient in a subdirectory of `bin/patients/` needs its full path. A missing file raises `FileNotFoundError`. (On ventilation-mechanics, `patient_file` is resolved as before: a name or a path under `bin/patients/`, or an absolute path.)
+- The first run stabilizes the patient with Pulse's own `initialize_engine` (about 13 s) and saves the result as a state file. Every later run of the same patient loads that file (about 0.04 s).
+- The cache is keyed by the patient file's contents, the Pulse install (version, git hash, a digest of the `PyPulse` binary and a digest of the data files Pulse reads at initialization) and the engine type. Editing the patient file, changing Pulse's code or its data files makes a new state.
+- The cache lives in `$VIVA_PULSE_CACHE_DIR` if set, otherwise in the user cache directory (`platformdirs.user_cache_path("viva-pulse")/states`, e.g. `~/Library/Caches/viva-pulse/states` on macOS). Deleting it is always safe.
+- A run from the cache matches an engine stabilized directly from the same patient to within 1e-6 relative after 30 s. It is not bit-identical, because the state round-trips through JSON.
+- `patient_file` defaults to `StandardMale.json`, and a value equal to the default can't be told from an unset one, so `patient_file="StandardMale.json"` uses `state_file`. StandardMale ships a state anyway.
+
+### Circuit modifiers
+
+`circuit_modifiers` changes a circuit value before the patient is stabilized. It is Pulse's own configuration `Modifiers`. It maps a path or node name to a multiplier on the resistance or compliance of that path, or the volume of that node, as Pulse initializes it. It is accepted on the whole-body engine by the same processes and composites as `patient_file`:
+
+```python
+doc = pulse_cardiovascular(core, circuit_modifiers={"Aorta1ToBone1": 5.0})
+```
+
+- The result is a different patient, not a perturbation. Stabilization re-tunes the rest of the circulation to hold the patient's baselines. `Aorta1ToBone1` ×5 ends at ×4.35 after re-tuning, with cardiac output about 10% higher and MAP unchanged. To change values during a run, use the multiplier setpoints instead.
+- Pulse already ships modifiers of its own (24 by default). A multiplier scales Pulse's value for that name (1 where it has none), and Pulse's other modifiers are kept.
+- Names are paths or nodes of the respiratory circuit or the active cardiovascular circuit (`FullCardiovascular`). Pulse rejects anything else, and the load fails naming the modifiers. Multipliers must be finite and greater than 0.
+- The modified patient is stabilized once and cached like any patient (see [Any patient](#any-patient)), with the modifiers in the cache key. The first run takes about 25 s: the unmodified patient is stabilized first, for Pulse's own modifiers. It starts from `patient_file` (default StandardMale), so a non-default `state_file` together with modifiers raises an error. It is whole_body only.
+
+### Circuit additions
+
+`circuit_additions` adds resistance paths to the cardiovascular circuit of the loaded state, for example an arteriovenous shunt. It is accepted by the same processes and composites as `circuit_modifiers`:
+
+```python
+doc = pulse_cardiovascular(core, circuit_additions={
+    "Shunt": {"source": "Aorta1", "target": "VenaCava1", "resistance_mmHg_s_per_mL": 0.5}})
+```
+
+- An addition is a perturbation of the loaded patient, not a new patient: nothing is re-stabilized, and the body responds over time. This shunt carries about 150 mL/s, and at 60 s MAP is 73 mmHg (from 95), HR 135 bpm (from 72) and CO 10.5 L/min (from 5.8).
+- Pulse solves a path in its circuits but moves substances only over its compartment graph. Each addition therefore gets a compartment link too, so blood carries its substances along the path. A path without the link would concentrate sodium in the aorta, dilute it in the vena cava and push arterial PO2 to 334 mmHg.
+- Accepted: a resistance path (finite, > 0) between two `FullCardiovascular` nodes in different vascular compartments, meaning in both Pulse's `Cardiovascular` and `ActiveCardiovascular` graphs, except `AbdominalCavity`. Anything else raises when the process is built: unknown nodes, `Ground`, tissue fluid, lymph, the pericardium, renal, urinary and gut-lumen compartments, nodes in no compartment, both nodes in one compartment, compliance paths, respiratory paths. Path removal is never supported (Pulse crashes).
+- In the state, the addition `Shunt` becomes path and link `VivaAddedShunt`. Pulse creates paths at run time (e.g. `AortaHemorrhage`) and would otherwise take over a link with the same name. With `point_reads` it is read like any other path: `circuits/cardiovascular_points/paths/VivaAddedShunt/flow_mL_per_min`. It reads 0 at load, because the path is first solved on the first step.
+- The joined compartments' regional flows include the added path (here `central/aorta/outflow_mL_per_min` and `central/vena_cava/inflow_mL_per_min`). Its resistance is fixed: the resistance multipliers and vascular tone don't scale it. A hemorrhage on a compartment the path feeds is larger, because Pulse sizes a bleed from the compartment's inflow.
+- Whole-body only. It combines with `patient_file` and `circuit_modifiers`: the path is added to the state they produce. The process reads (and, if needed, stabilizes) that state when it is built, not on its first update.
+
+### Saving states during a run
+
+`viva_pulse.states.save_states(engine, out_dir, times_s)` advances a loaded Pulse engine to each simulation time and saves its state there as `<name>@<t>s.json`, Pulse's own naming for its shipped states. A saved state is an ordinary state file, so `state_file` loads it as the start of another run: run to `t`, save, then branch that exact state under several interventions.
+
+```bash
+python -m viva_pulse.states StandardMale@0s.json --times 60 120 --out states/
+```
+
+- The state holds everything the engine held, including paths and actions added during the run: a hemorrhage's bleed path and link are in it, and the bleed continues after reload.
+- A reloaded state continues the run closely, but not bit-identically. Saved during a hemorrhage at 10 s and advanced 20 s, every vital agrees with the uninterrupted run to 2e-8 relative.
+- Each state is saved at the first Pulse step (0.02 s) at or after its time. The file name uses the engine's time rounded to the microsecond; the state records the exact `SimulationTime`.
+- On the command line, a bare name is a state in `<install>/bin/states/`; anything with a path separator is a path.
+- Whole-body engines only (Pulse doesn't serialize ventilation-mechanics); others raise before anything is advanced. An existing file is never overwritten, and two times within one step raise. To merge time lists from several sources, round each time up to its step and drop duplicates first: `times = sorted({math.ceil(round(t / 0.02, 6)) * 0.02 for t in times})`.
+- Pass all times in one call. Measured on an Apple-silicon Mac, saving every step costs about 26 ms and 2.5 MB per state (about twice the time with one call per state), and the engine runs about 33x faster than real time between saves.
+- `save_states` drives the engine it is given, so it is for an engine you hold (Pulse's API, the command line). In a composite, the whole-body processes save their own engine: set `save_state_times_s` (e.g. `[0, 300, 600]`), `save_state_dir` and optionally `save_state_name` in the `PulseProcess` or `PulseCircuitProcess` config. The times are Pulse's simulation time, which continues from the loaded state (a branch from a 10 s checkpoint is at 10 s when it starts). Each state is saved at the first update boundary at or after its time (so at whole seconds with the default 1 s interval). Saving never steps the engine, so the run matches an unsaved one to 1e-9 relative. Pulse itself varies by about 1e-14 between identical runs in one process, so no run is guaranteed bit-identical. A relative `save_state_dir` is resolved against the working directory. States of the same name already in the directory raise when the composite is built; two processes saving into one directory need different names. The generators don't take these options yet, so set them in the process's `config` in the document.
+- **Branching from a saved state.** A new composite with `state_file` set to a saved state continues that run with the same setpoints: a mid-bleed checkpoint continued for 20 s agrees with the uninterrupted run to 1.8e-8 relative. A ventilated checkpoint diverges more (tidal volume 0.3% after 1 s), from Pulse's own reload, not from branching. The saved state carries the actions active when it was saved (a bleed, an infusion, the ventilator, intubation, multipliers, heating). Each setpoint group whose action is active there is sent on the branch's first update whatever its value, so a branch can stop the bleed or disconnect the ventilator. Refused at load, rather than left running unreported: a bleed or infusion in another compartment or compound than the process is configured for, and, for a process with an airway device, an airway held by equipment it doesn't control. Also refused: extubating an intubated checkpoint (Pulse's Python API can't extubate), and, by `pulse_thermal`, a checkpoint whose environment was changed (Pulse folds an environment change into the state, not into an active action). The branch's composite time starts at 0; Pulse's own time continues from the save.
+- A state saved from a process with point reads or `circuit_additions` contains their added compartments, paths and links, so loading it with the same options again raises a name collision.
 
 ## Pulse circuits
 
@@ -226,14 +307,16 @@ curl -s -X POST -H 'Content-Type: application/json' \
 
 The investigation `pulse-hemorrhage` (`workspace/investigations/`) has three studies (`workspace/studies/`). Every run is recorded in the study's `runs.db`: its parameters, the git commit, the Python version, and the readouts at every simulated second. Each study's pass criteria are the pytest files in its `tests/` directory, fixed before the canonical runs. They were written after direct pilot runs, recorded in `workspace/experiments/_runs.yaml`; the pilots overlap some canonical configurations, and Pulse is deterministic, so those criteria are regression checks rather than predictions.
 
-| Study | What it varies | Result (StandardMale unless stated, right-leg bleed, 10 min) |
-|---|---|---|
-| `hemorrhage-severity-sweep` | Severity 0, 0.2, 0.4, 0.6, 0.8, 1.0 | Blood lost 0 / 386 / 823 / 1241 / 1577 / 1793 mL, heart rate 71 / 76 / 88 / 98 / 107 / 110 per min. MAP stays within 1.1 mmHg of its start (95.3) up to severity 0.4, then falls to 87.9 / 84.1 / 78.1 mmHg. |
-| `fluid-resuscitation` | Untreated; MAP-targeted infusion of saline or whole blood | Both treated arms end with 78 mL more blood volume and 2.2 mmHg more MAP than untreated. The controller only starts at 508 s and delivers 79.6 mL, so saline and whole blood can't be told apart within 10 minutes. |
-| `patient-cohort` | All 21 patient states shipped with Pulse | Every patient loses blood volume and MAP and raises heart rate. Absolute loss (1094 to 1755 mL) varies much less than starting blood volume (2.9 to 7.1 L), so smaller patients lose a larger fraction: 23.8% (Overweight) to 38.1% (Underweight), Spearman ρ = −0.91 against starting blood volume. |
+<!-- BEGIN:investigations -->
+<!-- generated by `vivarium-workbench gen-readme` — edit the source, not this table -->
+
+| Investigation | Research question |
+|---|---|
+| [Hemorrhage and resuscitation in the Pulse engine _(complete)_](https://vivarium-collective.github.io/viva-pulse/investigations/pulse-hemorrhage.html) | How does the whole-body Pulse engine respond to a hemorrhage: how does the response scale with bleed severity, does closed-loop fluid resuscitation change it, and does the same bleed behave the same… |
+<!-- END:investigations -->
 
 - **Sweeps are one variant per value.** The workbench runs `kind: sweep` only through its v2ecoli workflow, so each severity (and each patient) is its own variant.
-- **Figures.** `viva_pulse/visualizations/` adds the severity response and the cohort scatter. The labelled time courses (per arm, per patient) are the studies' `comparative_visualizations`, rendered at the end of an investigation run into each study's `viz/`.
+- **Figures.** `viva_pulse/visualizations/` adds a bespoke figure per study: the severity response, the fluid-resuscitation three-panel time course, and the cohort scatter. The labelled time courses (per arm, per patient) are the studies' `comparative_visualizations`, rendered at the end of an investigation run into each study's `viz/`.
 - **Known workbench limits** (drafted for upstream): `check-observables` and the report lint flag every `vitals.*` readout as not emittable, because they inspect the generator's document before the process fills `vitals/`; `tests/test_studies.py` checks the readouts against the running composite instead. The workbench's computed gate also reads only YAML behavior tests, so it shows these studies as blocked even though every pytest criterion passes.
 
 ## Documentation
@@ -252,7 +335,7 @@ uv run --no-sync pytest -q
 
 The full suite takes about 225 s, most of it simulated time in the thermal, whole-body and resuscitation tests. Every engine-dependent test drives the real Pulse build; nothing is mocked. Where a test needs an expected value, it loads its own engine directly through Pulse's Python API.
 
-CI (`.github/workflows/pulse-engine-ci.yml`) runs the same suite on every pull request against a real Pulse build. It builds Pulse from source once per toolchain (`.github/scripts/build-pulse.sh`), checks the install with `.github/scripts/verify-pulse-install.py`, and caches it; a skipped engine test fails the run.
+CI (`.github/workflows/pulse-engine-ci.yml`) runs the same suite on every pull request against a real Pulse build. It builds Pulse from source once per toolchain (`.github/scripts/build-pulse.sh`), checks the install with `.github/scripts/verify-pulse-install.py`, and caches it. Any skipped test fails the run, except `test_composite_state_artifacts` (the template test that skips when no composite-state artifacts are committed).
 
 ---
 ## Regarding...
@@ -269,8 +352,10 @@ The existing Pulse python binding (`src/python/*`) is a light wrapper, not a 1:1
    Anesthesia-machine and inhaler actions are missing, for example, as is the circuit-override action.
 
 So Python can do what a scenario file can: load a patient, apply actions, step time, and read named values (whole-body vitals, region pressures, volumes, flows
-and substances). It can't reach inside the engine, which is why the circuit composites work at the region level, not node by node. Making it closer to 1:1
-would mean writing new pybind bindings in ../engine. That's the "bind more of the C++" option we set aside.
+and substances). It can't reach inside the engine. Single nodes and paths are still readable, because a state file names Pulse's compartments and links, and a
+compartment can hold one node and a link one path; the `*_points` modules add those before loading (see "Point reads" above). What stays out of reach
+without new pybind bindings in ../engine is changing the model itself: rewiring circuits, or running the cardiovascular circuit on its own. The scope is in
+`docs/plan/plan-circuit-level-access.md`.
 
 ## ...Electrical circuits
 

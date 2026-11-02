@@ -87,9 +87,13 @@ def test_setpoint_and_config_names_are_unique_across_modules():
 
 
 def test_whole_body_composite_includes_every_whole_body_module():
-    """Falsifies: a module that runs on whole_body is left out of the combined composite."""
-    assert {m.name for m in WHOLE_BODY_MODULES} == {
-        name for name, m in MODULES.items() if "whole_body" in m.model_types}
+    """Falsifies: a module that runs on whole_body is left out of the combined composite (the
+    point modules are opt-in, through point_reads), or point_reads adds anything else."""
+    whole_body = {name for name, m in MODULES.items() if "whole_body" in m.model_types}
+    points = {name for name, m in MODULES.items() if m.prepare_state}
+    assert {m.name for m in WHOLE_BODY_MODULES} == whole_body - points
+    document = pulse_whole_body_circuits(build_core(), point_reads=True)
+    assert set(document["pulse"]["config"]["modules"]) == whole_body
 
 
 def test_airway_devices_are_declared():
@@ -156,7 +160,10 @@ def test_combined_readings_equal_the_single_module_composites(baseline):
         actual = dict(_leaves(baseline[120][name]))
         assert actual.keys() == expected.keys(), name
         for path, value in expected.items():
-            assert actual[path] == pytest.approx(value, rel=1e-9, abs=1e-12), (name, path)
+            # Not exact: identical Pulse runs in one process occasionally differ by ~1e-14, which
+            # can grow over 120 s (once seen: 4.5e-11 absolute on a value of 1.3e-4). A
+            # mis-mapped reading or a perturbed engine differs by orders of magnitude more.
+            assert actual[path] == pytest.approx(value, rel=1e-6, abs=1e-9), (name, path)
 
 
 def test_room_air_blood_gases_are_in_normal_ranges(baseline):
@@ -255,7 +262,7 @@ def test_staged_handover_from_ventilator_to_oxygen_works():
     for _ in range(4):
         update = process.update(_airway(0.0, 1.0), 30.0)
         assert "irreversible_state" not in update
-    fio2 = process._previous[[r.property for r in process._requests].index("FractionOfInspiredOxygen")]
+    fio2 = process._pull(process._engine)[[r.property for r in process._requests].index("FractionOfInspiredOxygen")]
     assert fio2 > 0.4
 
 

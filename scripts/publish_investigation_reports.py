@@ -171,7 +171,7 @@ def _dashboard_binary(ws_root: Path) -> str:
         return found
     raise RuntimeError(
         "vivarium-workbench CLI not found (looked in .venv/bin and PATH); "
-        "install it with `uv sync` or `uv pip install vivarium-workbench`"
+        "install it with `uv sync --extra workbench` or `uv pip install vivarium-workbench`"
     )
 
 

@@ -38,25 +38,30 @@ baseline:
     n_steps: 600
 variants:
 - name: severity-0.0
-  base_composite: severity-0.8
+  composite: viva_pulse.composites.hemorrhage.pulse_hemorrhage
   parameter_overrides:
     severity: 0.0
+    n_steps: 600
 - name: severity-0.2
-  base_composite: severity-0.8
+  composite: viva_pulse.composites.hemorrhage.pulse_hemorrhage
   parameter_overrides:
     severity: 0.2
+    n_steps: 600
 - name: severity-0.4
-  base_composite: severity-0.8
+  composite: viva_pulse.composites.hemorrhage.pulse_hemorrhage
   parameter_overrides:
     severity: 0.4
+    n_steps: 600
 - name: severity-0.6
-  base_composite: severity-0.8
+  composite: viva_pulse.composites.hemorrhage.pulse_hemorrhage
   parameter_overrides:
     severity: 0.6
+    n_steps: 600
 - name: severity-1.0
-  base_composite: severity-0.8
+  composite: viva_pulse.composites.hemorrhage.pulse_hemorrhage
   parameter_overrides:
     severity: 1.0
+    n_steps: 600
 readouts:
 - name: mean-arterial-pressure
   store_path: vitals.mean_arterial_pressure_mmHg
@@ -114,8 +119,8 @@ expected_behavior:
   test: tests/test_severity.py::test_blood_loss_rises_with_severity
 - name: pressure-held-until-severe
   observable: vitals.mean_arterial_pressure_mmHg
-  condition: within 2 mmHg of start at severity 0.2 and 0.4; at least 8 mmHg below
-    start at 0.8
+  condition: every sample within 2 mmHg of start at severity 0.2 and 0.4; at least
+    8 mmHg below start at 0.8
   test: tests/test_severity.py::test_pressure_held_for_mild_bleeds, test_pressure_falls_for_severe_bleeds
 visualizations:
 - name: severity-response
@@ -140,6 +145,13 @@ controls:
     starting values.
   observed: 0 mL lost; MAP 95.3 -> 95.3 mmHg; heart rate 72.0 -> 71.2 /min.
   result: PASS
+- name: severity-1.0
+  kind: positive
+  hypothesis: A maximal bleed produces the largest, unambiguous loss and the deepest
+    pressure fall, confirming the readout responds when the effect is certainly present.
+  expected: The largest hemorrhaged volume of the sweep and the lowest MAP.
+  observed: 1793 mL lost (most of any arm); MAP 95.3 -> 78.1 mmHg (largest fall).
+  result: PASS
 preregistered:
   registered_at: '2026-10-23'
   criteria:
@@ -158,7 +170,10 @@ preregistered:
   pilot: Criteria were written after a direct pilot (workspace/experiments/_runs.yaml,
     pilot-2026-10-23-severity) at severity 0.2, 0.5 and 0.8. Pulse is deterministic,
     so the criteria at 0.2 and 0.8 were set knowing those outcomes; severity 0.0,
-    0.4, 0.6 and 1.0 were not run before the canonical runs.
+    0.4, 0.6 and 1.0 were not run before the canonical runs. On 2026-10-26 the mild-bleed
+    criterion was tightened from the final sample to every 1 s sample, and a check
+    that severity 0.6 leaves the band was added; both were written after the canonical
+    runs, so they are regression checks, not predictions.
 falsifiability: 'The hypothesis is refuted if blood loss or heart rate fails to increase
   with
 
@@ -171,6 +186,40 @@ limitations:
 - One patient (StandardMale), one site (RightLeg) and 10 minutes; longer bleeds and
   other sites are not covered.
 - Severity is Pulse's own dimensionless scale, not a calibrated flow rate.
+- Acceptance bands trace to the deterministic pilot and the .build-progress.md reference
+  run, not to external physiology literature (none was provided), so they are regression
+  checks on Pulse's behaviour, not a validation against data.
+alternative_hypotheses:
+- hypothesis: MAP is held at low severity only because less blood is lost, not by
+    active compensation.
+  status: excluded
+  evidence: Blood loss rises monotonically with severity (F-01) while MAP is still
+    held flat through severity 0.4; the pressure is maintained despite increasing
+    loss, so reduced loss cannot be the explanation.
+- hypothesis: The heart-rate rise is incidental and does not defend pressure.
+  status: excluded
+  evidence: MAP ends within 1.1 mmHg of start, and never strays more than 1.8 mmHg,
+    exactly over the range where heart rate climbs and cardiac output is still near
+    baseline, and breaks only once cardiac output falls (F-02, F-04); the tachycardia
+    tracks the pressure defence.
+- hypothesis: The last-step deferral or the fixed 1 s record step distorts the severity-0.8
+    numbers.
+  status: excluded
+  evidence: Severity 0.8 reproduces the independent reference run to 4 significant
+    figures (F-03), so the recording cadence does not move the result.
+discovery_implications:
+  resolved: Over 10 minutes and one site, MAP is defended by baroreflex tachycardia
+    until roughly severity 0.5, then falls as cardiac output drops.
+  remaining: Whether the same threshold holds at other bleed sites, over longer windows
+    where compensation may fatigue, and how Pulse severity maps to a calibrated flow
+    rate.
+  followup_study_proposals:
+  - title: multi-site-severity
+    motivation: Repeat the sweep at a second compartment (e.g. an arm or the aorta)
+      to test whether the severity-0.5 compensation threshold is site-specific.
+  - title: long-window-decompensation
+    motivation: Extend the severe arms past 10 minutes to see whether the held pressure
+      at mild severities eventually decompensates.
 runs:
 - name: viva_pulse.composites.hemorrhage.pulse_hemorrhage__1792749102__7f862d
   status: completed
@@ -328,6 +377,233 @@ runs:
         source: override
     params_captured_at: '2026-10-23'
     params_source: dashboard-runner
+- name: viva_pulse.composites.hemorrhage.pulse_hemorrhage__1792956765__e18bb6
+  status: completed
+  timestamp: 1792956781.270127
+  emitter:
+    kind: unknown
+  env_id: b0b1fa2138c7b171
+  params: '{"state_file": "StandardMale@0s.json", "compartment": "RightLeg", "severity":
+    0.8}'
+  computed_outcomes:
+    _status: store_unresolved
+  provenance:
+    params:
+      compartment:
+        value: RightLeg
+        source: override
+      n_steps:
+        value: 600
+        source: resolved
+      severity:
+        value: 0.8
+        source: override
+      state_file:
+        value: StandardMale@0s.json
+        source: override
+    params_captured_at: '2026-10-25'
+    params_source: dashboard-runner
+- name: viva_pulse.composites.hemorrhage.pulse_hemorrhage__1792956782__67de5d
+  status: completed
+  timestamp: 1792956783.7225978
+  emitter:
+    kind: unknown
+  env_id: b0b1fa2138c7b171
+  params: '{"severity": 0.0}'
+  computed_outcomes:
+    _status: store_unresolved
+  provenance:
+    params:
+      severity:
+        value: 0.0
+        source: override
+    params_captured_at: '2026-10-25'
+    params_source: dashboard-runner
+- name: viva_pulse.composites.hemorrhage.pulse_hemorrhage__1792956784__5b0726
+  status: completed
+  timestamp: 1792956785.2964852
+  emitter:
+    kind: unknown
+  env_id: b0b1fa2138c7b171
+  params: '{"severity": 0.2}'
+  computed_outcomes:
+    _status: store_unresolved
+  provenance:
+    params:
+      severity:
+        value: 0.2
+        source: override
+    params_captured_at: '2026-10-25'
+    params_source: dashboard-runner
+- name: viva_pulse.composites.hemorrhage.pulse_hemorrhage__1792956785__4bf161
+  status: completed
+  timestamp: 1792956786.856798
+  emitter:
+    kind: unknown
+  env_id: b0b1fa2138c7b171
+  params: '{"severity": 0.4}'
+  computed_outcomes:
+    _status: store_unresolved
+  provenance:
+    params:
+      severity:
+        value: 0.4
+        source: override
+    params_captured_at: '2026-10-25'
+    params_source: dashboard-runner
+- name: viva_pulse.composites.hemorrhage.pulse_hemorrhage__1792956787__e16c1f
+  status: completed
+  timestamp: 1792956788.526607
+  emitter:
+    kind: unknown
+  env_id: b0b1fa2138c7b171
+  params: '{"severity": 0.6}'
+  computed_outcomes:
+    _status: store_unresolved
+  provenance:
+    params:
+      severity:
+        value: 0.6
+        source: override
+    params_captured_at: '2026-10-25'
+    params_source: dashboard-runner
+- name: viva_pulse.composites.hemorrhage.pulse_hemorrhage__1792956789__8798fc
+  status: completed
+  timestamp: 1792956790.207267
+  emitter:
+    kind: unknown
+  env_id: b0b1fa2138c7b171
+  params: '{"severity": 1.0}'
+  computed_outcomes:
+    _status: store_unresolved
+  provenance:
+    params:
+      severity:
+        value: 1.0
+        source: override
+    params_captured_at: '2026-10-25'
+    params_source: dashboard-runner
+- name: viva_pulse.composites.hemorrhage.pulse_hemorrhage__1792957171__762b96
+  status: completed
+  timestamp: 1792957187.274842
+  emitter:
+    kind: unknown
+  env_id: b0b1fa2138c7b171
+  params: '{"state_file": "StandardMale@0s.json", "compartment": "RightLeg", "severity":
+    0.8}'
+  computed_outcomes:
+    _status: store_unresolved
+  provenance:
+    params:
+      compartment:
+        value: RightLeg
+        source: override
+      n_steps:
+        value: 600
+        source: resolved
+      severity:
+        value: 0.8
+        source: override
+      state_file:
+        value: StandardMale@0s.json
+        source: override
+    params_captured_at: '2026-10-25'
+    params_source: dashboard-runner
+- name: viva_pulse.composites.hemorrhage.pulse_hemorrhage__1792957188__7fa02a
+  status: completed
+  timestamp: 1792957204.6573598
+  emitter:
+    kind: unknown
+  env_id: b0b1fa2138c7b171
+  params: '{"severity": 0.0}'
+  computed_outcomes:
+    _status: store_unresolved
+  provenance:
+    params:
+      n_steps:
+        value: 600
+        source: resolved
+      severity:
+        value: 0.0
+        source: override
+    params_captured_at: '2026-10-25'
+    params_source: dashboard-runner
+- name: viva_pulse.composites.hemorrhage.pulse_hemorrhage__1792957205__bac11f
+  status: completed
+  timestamp: 1792957221.325367
+  emitter:
+    kind: unknown
+  env_id: b0b1fa2138c7b171
+  params: '{"severity": 0.2}'
+  computed_outcomes:
+    _status: store_unresolved
+  provenance:
+    params:
+      n_steps:
+        value: 600
+        source: resolved
+      severity:
+        value: 0.2
+        source: override
+    params_captured_at: '2026-10-25'
+    params_source: dashboard-runner
+- name: viva_pulse.composites.hemorrhage.pulse_hemorrhage__1792957221__9d935e
+  status: completed
+  timestamp: 1792957237.9450681
+  emitter:
+    kind: unknown
+  env_id: b0b1fa2138c7b171
+  params: '{"severity": 0.4}'
+  computed_outcomes:
+    _status: store_unresolved
+  provenance:
+    params:
+      n_steps:
+        value: 600
+        source: resolved
+      severity:
+        value: 0.4
+        source: override
+    params_captured_at: '2026-10-25'
+    params_source: dashboard-runner
+- name: viva_pulse.composites.hemorrhage.pulse_hemorrhage__1792957238__7ee11d
+  status: completed
+  timestamp: 1792957254.845289
+  emitter:
+    kind: unknown
+  env_id: b0b1fa2138c7b171
+  params: '{"severity": 0.6}'
+  computed_outcomes:
+    _status: store_unresolved
+  provenance:
+    params:
+      n_steps:
+        value: 600
+        source: resolved
+      severity:
+        value: 0.6
+        source: override
+    params_captured_at: '2026-10-25'
+    params_source: dashboard-runner
+- name: viva_pulse.composites.hemorrhage.pulse_hemorrhage__1792957255__cb4d00
+  status: completed
+  timestamp: 1792957271.8165388
+  emitter:
+    kind: unknown
+  env_id: b0b1fa2138c7b171
+  params: '{"severity": 1.0}'
+  computed_outcomes:
+    _status: store_unresolved
+  provenance:
+    params:
+      n_steps:
+        value: 600
+        source: resolved
+      severity:
+        value: 1.0
+        source: override
+    params_captured_at: '2026-10-25'
+    params_source: dashboard-runner
 simulation_set:
 - name: severity-0.8-baseline
   kind: single
@@ -349,35 +625,35 @@ simulation_set:
   - hemorrhage-severity
 - name: severity-0.0
   kind: single
-  base_model: severity-0.8
+  base_model: viva_pulse.composites.hemorrhage.pulse_hemorrhage
   perturbation:
     severity: 0.0
   status: ran
   metrics: *id001
 - name: severity-0.2
   kind: single
-  base_model: severity-0.8
+  base_model: viva_pulse.composites.hemorrhage.pulse_hemorrhage
   perturbation:
     severity: 0.2
   status: ran
   metrics: *id001
 - name: severity-0.4
   kind: single
-  base_model: severity-0.8
+  base_model: viva_pulse.composites.hemorrhage.pulse_hemorrhage
   perturbation:
     severity: 0.4
   status: ran
   metrics: *id001
 - name: severity-0.6
   kind: single
-  base_model: severity-0.8
+  base_model: viva_pulse.composites.hemorrhage.pulse_hemorrhage
   perturbation:
     severity: 0.6
   status: ran
   metrics: *id001
 - name: severity-1.0
   kind: single
-  base_model: severity-0.8
+  base_model: viva_pulse.composites.hemorrhage.pulse_hemorrhage
   perturbation:
     severity: 1.0
   status: ran
@@ -389,15 +665,16 @@ pipeline_gate:
     - blood-loss-rises-with-severity
     - pressure-held-until-severe
     evaluated_by: code
-    diverges_from_authored: false
+    diverges_from_authored: true
 last_test_run:
-  timestamp: '2026-10-23T10:25:20+00:00'
-  passed: 7
+  timestamp: '2026-10-26T20:21:13+00:00'
+  passed: 8
   failed: 0
   skipped: 0
-  duration_s: 0.35389280319213867
-claim: 'Blood loss and heart rate rise steadily with severity, while MAP stays within
-  1.1 mmHg of its start up to severity 0.4 and falls 7-17 mmHg from severity 0.6 upward.
+  duration_s: 0.42679500579833984
+claim: 'Blood loss and heart rate rise steadily with severity, while MAP ends within
+  1.1 mmHg of its start, and never strays more than 1.8 mmHg, up to severity 0.4 and
+  falls 7-17 mmHg from severity 0.6 upward.
 
   '
 confidence: Accepted
@@ -411,7 +688,7 @@ findings:
     study_tests:
     - tests/test_severity.py::test_blood_loss_rises_with_severity
     - tests/test_severity.py::test_heart_rate_rises_with_severity
-    runs: 'canonical runs: investigation run of 2026-10-23 at commit 5754940 (runs.db)'
+    runs: 'canonical runs: investigation run of 2026-10-25 at commit b4332d6 (runs.db)'
 - id: F-02
   tier: observation
   statement: MAP ended at 95.0 and 94.2 mmHg for severity 0.2 and 0.4 (start 95.3),
@@ -422,7 +699,7 @@ findings:
     study_tests:
     - tests/test_severity.py::test_pressure_held_for_mild_bleeds
     - tests/test_severity.py::test_pressure_falls_for_severe_bleeds
-    runs: 'canonical runs: investigation run of 2026-10-23 at commit 5754940 (runs.db)'
+    runs: 'canonical runs: investigation run of 2026-10-25 at commit b4332d6 (runs.db)'
 - id: F-03
   tier: observation
   statement: Severity 0.8 reproduces the earlier reference run (blood volume 3936
@@ -430,7 +707,20 @@ findings:
   evidence:
     study_tests:
     - tests/test_severity.py::test_reproduces_reference_run
-    runs: 'canonical runs: investigation run of 2026-10-23 at commit 5754940 (runs.db)'
+    runs: 'canonical runs: investigation run of 2026-10-25 at commit b4332d6 (runs.db)'
+- id: F-04
+  tier: mechanism
+  mechanism_origin: emergent
+  statement: Pressure is defended by baroreflex tachycardia, not by reduced loss.
+    Heart rate rises monotonically with severity (71 -> 110 /min) while cardiac output
+    still falls (5.75 -> 3.95 L/min); MAP is held only while the tachycardia offsets
+    the volume loss and breaks once the bleed outruns it (severity >= 0.6). The compensation
+    is Pulse's own cardiovascular reflex, not an imposed term.
+  evidence:
+    study_tests:
+    - tests/test_severity.py::test_heart_rate_rises_with_severity
+    - tests/test_severity.py::test_pressure_falls_for_severe_bleeds
+    runs: 'canonical runs: investigation run of 2026-10-25 at commit b4332d6 (runs.db)'
 conclusion: '## Claims
 
   The hypothesis holds on all six criteria (7/7 tests passed). The criteria were fixed
@@ -440,8 +730,9 @@ conclusion: '## Claims
 
   ## Limitations
 
-  One patient, one site and 10 minutes. The time at which MAP leaves its starting
-  band is not reported: beat-to-beat dips cross a 2 mmHg band before any sustained
-  fall.
+  One patient, one site and 10 minutes. MAP is recorded once a second, so dips within
+  a heartbeat are not seen. At that resolution no sample at severity 0.2 or 0.4 leaves
+  a 2 mmHg band around the start (largest deviations 1.13 and 1.78 mmHg); severity
+  0.6, 0.8 and 1.0 first leave it at 416, 447 and 366 s.
 
   '

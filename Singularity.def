@@ -37,7 +37,7 @@ From: python:3.13-slim-bookworm
     # Same fallback chain as the Dockerfile: try a project-skipping sync
     # (faster + handles workspaces whose pyproject still has the
     # hatchling bypass), fall back to a full sync.
-    uv sync --no-install-project || uv sync
+    uv sync --no-install-project --extra workbench || uv sync --extra workbench
 
 %environment
     export PYTHONUNBUFFERED=1

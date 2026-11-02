@@ -21,19 +21,16 @@ def test_initial_state_is_the_loaded_pulse_state():
     assert state["irreversible_state"] is False
 
 
-def test_update_emits_deltas_that_accumulate_to_pulse_readings():
+def test_update_emits_pulse_readings():
+    """Falsifies: an update emits a delta or a stale value instead of Pulse's current
+    reading. (Port mapping is checked against independent engines in test_patients.)"""
     proc = make_pulse()
-    stores = {k: v for k, v in proc.initial_state().items() if k in VITALS}
     controls = {"hemorrhage_severity": 0.5, "iv_rate_mL_per_min": 0.0}
     for _ in range(30):
         update = proc.update(controls, 1.0)
         assert set(update) == set(VITALS)
-        for k, delta in update.items():
-            stores[k] += delta
-    truth = proc._read_vitals()
-    for k in VITALS:
-        assert stores[k] == pytest.approx(truth[k], abs=1e-6)
-    assert truth["total_hemorrhaged_volume_mL"] > 0.0
+        assert update == dict(zip(VITALS, proc._engine.pull_data()[1:]))
+    assert update["total_hemorrhaged_volume_mL"] > 0.0
 
 
 def test_hemorrhage_lowers_blood_volume_and_raises_heart_rate():
@@ -66,6 +63,49 @@ def test_iv_infusion_slows_blood_loss():
         return proc._read_vitals()["blood_volume_mL"]
 
     assert blood_volume_after(200.0) - blood_volume_after(0.0) > 200.0
+
+
+def _infuse(compound, rate_mL_per_min, seconds):
+    """Blood volume (mL) and hemoglobin content (g) after an infusion, from a directly
+    driven engine."""
+    from viva_pulse.processes import _load_engine
+    from viva_pulse.runtime import ensure_pulse_importable
+
+    ensure_pulse_importable()
+    from pulse.cdm.engine import SEDataRequest
+    from pulse.cdm.patient_actions import SESubstanceCompoundInfusion
+    from pulse.cdm.scalars import MassUnit, VolumePerTimeUnit, VolumeUnit
+
+    engine = _load_engine("", "HumanAdultWholeBody", "StandardMale@0s.json",
+                          [SEDataRequest.create_physiology_request("BloodVolume", unit=VolumeUnit.mL),
+                           SEDataRequest.create_physiology_request("HemoglobinContent", unit=MassUnit.g)])
+    infusion = SESubstanceCompoundInfusion()
+    infusion.set_compound(compound)
+    infusion.get_rate().set_value(rate_mL_per_min, VolumePerTimeUnit.mL_Per_min)
+    infusion.get_bag_volume().set_value(10.0, VolumeUnit.L)
+    engine.process_action(infusion)
+    assert engine.advance_time_s(seconds)
+    return engine.pull_data()[1:]
+
+
+def test_infused_volume_does_not_depend_on_the_compound():
+    """Falsifies the fluid-resuscitation root cause: Pulse adds infused volume at the
+    commanded rate whatever the compound (DrugModel.cpp, IVToVenaCava flow source), and the
+    compound only adds its substances. Equal rates of saline and whole blood must give the
+    same blood volume (to 1e-4; they differ by about 1e-5 through downstream chemistry),
+    while blood adds exactly the hemoglobin its compound file carries."""
+    import json
+
+    rate, seconds = 100.0, 300.0
+    saline_volume, saline_hb = _infuse("Saline", rate, seconds)
+    blood_volume, blood_hb = _infuse("Blood", rate, seconds)
+    assert blood_volume == pytest.approx(saline_volume, rel=1e-4)
+
+    compound = json.loads((resolve_install_dir("") / "bin" / "substances" / "compounds" / "Blood.json").read_text())
+    g_per_dL = {c["Name"]: c["Concentration"]["ScalarMassPerVolume"] for c in compound["Component"]}
+    assert all(g_per_dL[name]["Unit"] == "g/dL" for name in ("Hemoglobin", "Oxyhemoglobin"))
+    infused_hb_g = (g_per_dL["Hemoglobin"]["Value"] + g_per_dL["Oxyhemoglobin"]["Value"]) / 100.0 * rate * seconds / 60.0
+    assert blood_hb - saline_hb == pytest.approx(infused_hb_g, rel=0.01)
 
 
 def test_rejects_unknown_compartment():

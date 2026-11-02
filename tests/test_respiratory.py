@@ -133,17 +133,13 @@ def test_cardiovascular_module_is_rejected_on_ventilation_mechanics():
                             core=build_core())
 
 
-@pytest.mark.parametrize("model_type, key, value", [
-    ("ventilation_mechanics", "state_file", "StandardFemale@0s.json"),
-    ("whole_body", "patient_file", "StandardFemale.json"),
-])
-def test_start_file_the_engine_ignores_raises(model_type, key, value):
-    """Falsifies: a state file on VentilationMechanics (which has no serialization) or a
-    patient file on WholeBody (which loads a state) is silently ignored, so the run uses
-    a different patient than the one asked for."""
-    with pytest.raises(ValueError, match=f"{key} .* is not used by model_type"):
-        PulseCircuitProcess({"model_type": model_type, "modules": ["respiratory"], key: value},
-                            core=build_core())
+def test_state_file_on_ventilation_mechanics_raises():
+    """Falsifies: a state file on VentilationMechanics (which has no serialization) is
+    silently ignored, so the run uses a different patient than the one asked for.
+    (WholeBody takes either file; tests/test_patients.py covers it.)"""
+    with pytest.raises(ValueError, match="state_file .* is not used by model_type"):
+        PulseCircuitProcess({"model_type": "ventilation_mechanics", "modules": ["respiratory"],
+                             "state_file": "StandardFemale@0s.json"}, core=build_core())
 
 
 def test_default_setpoints_pass_their_validators():
@@ -188,7 +184,7 @@ def test_generators_validate_parameters_when_building(generator, params, match):
 @pytest.mark.parametrize("model_type", ENGINES)
 def test_store_tracks_pulse(model_type):
     """Falsifies: the patient-initialized load path (VentilationMechanics), the gas-
-    compartment requests, or the delta accounting is wrong. Stores after 20 one-second
+    compartment requests, or the store mapping is wrong. Stores after 20 one-second
     updates must equal an independent engine at the same engine time."""
     sim, rows = _run(pulse_respiratory, 20, model_type=model_type)
     # Pulse accumulates engine time as a float (e.g. 25.9999999999995 s); advancing an
@@ -211,12 +207,14 @@ def test_ventilation_mechanics_settles_before_time_zero():
     assert math.isfinite(_mech(rows[0])["peak_inspiratory_pressure_cmH2O"])
 
 
-def test_settling_that_runs_out_names_the_unserved_request():
+@pytest.mark.parametrize("max_settle_s", [2.5, 0.0])
+def test_settling_that_runs_out_names_the_unserved_request(max_settle_s):
     """Falsifies: an engine still unsettled after max_settle_s starts anyway with NaN
     stores. The first breath completes after ~6 s, so 2.5 s must fail the load, naming
-    the request."""
+    the request. 0.0 means no settling (bigraph-schema before 1.8.3 replaced an explicit
+    0.0 with the 30 s default, so that load succeeded)."""
     process = PulseCircuitProcess({"model_type": "ventilation_mechanics", "modules": ["respiratory"],
-                                   "max_settle_s": 2.5}, core=build_core())
+                                   "max_settle_s": max_settle_s}, core=build_core())
     with pytest.raises(ValueError, match="NaN for: physiology:PeakInspiratoryPressure"):
         process.initial_state()
 
