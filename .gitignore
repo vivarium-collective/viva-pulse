@@ -33,3 +33,6 @@ workspace/reports/assets/*
 !workspace/reports/assets/.keep
 .superpowers/brainstorm/
 todo.md
+
+# Jim Schaff's Smoldyn fork (pyhybrid), built for viva-pde-particle (multiscale spatial stage)
+.smoldyn-build/

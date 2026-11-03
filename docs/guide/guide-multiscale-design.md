@@ -8,7 +8,7 @@ Four dials set how far the design goes. Each dial has a current setting, and a f
 Pulse whole body  →  organ tissue (strata)  →  cells          nothing flows back (yet)
 
 DIAL 1  Coverage       [liver]  →  more organs                    gate: map Pulse compartments to organs
-DIAL 2  Cell content    1 simulator  →  [2 of 3 built: kinetic + thermo]  →  + spatial (NEXT)  →  many cells as agents
+DIAL 2  Cell content    1 simulator  →  [kinetic + thermo built]  →  + spatial (probed)  →  many cells as agents
 DIAL 3  Direction      [one-way]  →  feedback into Pulse         gate: a modeler-approved sink ledger
 DIAL 4  Execution      [live, replay]  →  surrogate              gate: runs too slow (they aren't)
 ```
@@ -51,9 +51,11 @@ König's model, as published, runs six reactions against thermodynamics at Pulse
 
 A corrected set of three constants (`metabolism_parameters: "provisional_corrections"`, per subpopulation) clears the worst conflicts, but then the liver stops making glucose: the published calibration leans on the faulty values. Both run side by side; the published model is the default. A modeler should decide. Details: [cell-content-probes](../plan/cell-content-probes/README.md).
 
-## Next: the spatial simulator
+## Next: the spatial simulator (probed; decision pending)
 
-viva-pde-particle couples an insulin field to receptor particles. It needs Jim Schaff's Smoldyn fork, built from source in a gitignored folder inside this repo, and a one-cell proof before it joins. Receptor binding then moves from the receptor model to the spatial one, provided the total number of receptors stays conserved between the two.
+viva-pde-particle (Jim Schaff's) couples an insulin field to receptor particles. Its Smoldyn fork is compiled in a gitignored folder of this repo and runs here, driven from outside through the same input a Pulse step would use.
+
+The probe answered the main question first ([spatial-probes](../plan/spatial-probes/README.md)). On a hepatocyte-sized membrane patch at Pulse's insulin level, binding is limited by the reaction, not by insulin delivery: delivery is about 11 times faster than receptors take insulin up. The spatial model reproduces the well-mixed receptor model, with at most a ~10% early lag. Moving receptor binding into it would cost much and change little, so the spatial simulator needs a question where delivery is the bottleneck.
 
 ## Provisional biology (a modeler should confirm)
 
