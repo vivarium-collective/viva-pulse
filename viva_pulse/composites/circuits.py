@@ -11,6 +11,7 @@ from process_bigraph.composite_generator import composite_generator
 
 from ..circuits import MODULES
 from ..circuits.cardiovascular import CARDIOVASCULAR, HEMORRHAGE_COMPARTMENTS, MULTIPLIERS
+from ..circuits.hepatic import HEPATIC
 from ..circuits.respiratory import (
     INTUBATION_TYPES, MECHANICAL_VENTILATOR, MULTIPLIERS as RESPIRATORY_MULTIPLIERS, RESPIRATORY,
     VENTILATOR_BASELINE, VENTILATOR_MODES)
@@ -393,7 +394,35 @@ def pulse_substances(core=None, *, model_type="whole_body", state_file="Standard
     }
 
 
-WHOLE_BODY_MODULES = (CARDIOVASCULAR, RESPIRATORY, MECHANICAL_VENTILATOR, THERMAL, SUPPLEMENTAL_OXYGEN, SUBSTANCES)
+@composite_generator(
+    name="pulse_hepatic",
+    description="The liver's blood supply in the real whole-body engine: liver and feeding-vessel "
+                "insulin, cycle-averaged liver inflow and portal outflows, liver tissue mass. "
+                "Read-only: no setpoints.",
+    parameters={
+        "model_type": {"type": "string", "default": "whole_body", "choices": ["whole_body"],
+                       "description": "Pulse engine running the circuits"},
+        "state_file": _STATE_FILE,
+        "interval": _INTERVAL,
+    },
+    core_extensions=[register_processes],
+    default_n_steps=300,
+    fidelity="real-bridge",
+)
+def pulse_hepatic(core=None, *, model_type="whole_body", state_file="StandardMale@0s.json",
+                  interval=1.0, **overrides):
+    _reject_unknown(overrides)
+    return {
+        "pulse": circuit_node(["hepatic"], model_type=model_type, state_file=state_file,
+                              interval=interval),
+        "interventions": {},
+        "circuits": {},
+        "emitter": circuit_emitter(),
+    }
+
+
+WHOLE_BODY_MODULES =(CARDIOVASCULAR, RESPIRATORY, MECHANICAL_VENTILATOR, THERMAL, SUPPLEMENTAL_OXYGEN, SUBSTANCES,
+                      HEPATIC)
 
 
 @composite_generator(

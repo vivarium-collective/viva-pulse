@@ -25,11 +25,15 @@ class Request:
     """One Pulse data request, emitted at ``path`` inside its module's port tree.
 
     ``category`` is ``"physiology"``, ``"environment"``, ``"liquid_compartment"``,
-    ``"gas_compartment"``, ``"thermal_compartment"``, ``"mechanical_ventilator"`` or
-    ``"substance"`` (whole-body values of the Pulse substance named by ``substance``).
+    ``"gas_compartment"``, ``"thermal_compartment"``, ``"mechanical_ventilator"``,
+    ``"substance"`` (whole-body values of the Pulse substance named by ``substance``),
+    ``"liquid_compartment_substance"`` (that substance in ``compartment``) or
+    ``"tissue"`` (a tissue compartment's own properties, e.g. ``TotalMass``).
     ``unit`` is ``(unit class in pulse.cdm.scalars, unit attribute)``, or None for
     unitless. Compartment property names are Pulse's own spelling: ``Pressure``,
-    ``Volume``, ``Inflow``, ``Outflow`` (``SEDataRequestTracker.cpp``), and
+    ``Volume``, ``Inflow``, ``Outflow``, ``AverageInflow``, ``AverageOutflow``
+    (``SEDataRequestTracker.cpp``, ``SEFluidCompartment``), ``Molarity`` for a
+    compartment substance (``SELiquidSubstanceQuantity``), and
     ``Temperature``, ``Heat``, ``HeatTransferRateIn``, ``HeatTransferRateOut``
     for thermal compartments (``SEThermalCompartment.cpp``).
 
@@ -76,6 +80,11 @@ class Request:
             return SEDataRequest.create_mechanical_ventilator_request(property, unit=unit)
         if self.category == "substance":
             return SEDataRequest.create_substance_request(self.substance, property, unit=unit)
+        if self.category == "liquid_compartment_substance":
+            return SEDataRequest.create_liquid_compartment_substance_request(
+                self.compartment, self.substance, property, unit=unit)
+        if self.category == "tissue":
+            return SEDataRequest.create_tissue_request(self.compartment, property, unit=unit)
         raise ValueError(f"unsupported data request category {self.category!r}")
 
 
