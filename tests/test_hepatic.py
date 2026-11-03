@@ -1,9 +1,10 @@
-"""The hepatic module reads the liver's blood supply from the real whole-body engine.
+"""The hepatic module reads liver insulin and tissue mass from the real whole-body engine.
 
 Real Pulse, no mocks. The oracle is a second engine loaded straight through
 Pulse's API, with every request spelled out here rather than taken from the module.
 """
 
+import json
 import math
 
 import pytest
@@ -15,21 +16,11 @@ from viva_pulse.runtime import ensure_pulse_importable
 ORACLE = {
     ("liver", "insulin_pmol_per_L"): ("cmpt_sub", "LiverVasculature", "Insulin", "Molarity",
                                       "AmountPerVolumeUnit", "pmol_Per_L"),
-    ("liver", "average_inflow_mL_per_min"): ("cmpt", "LiverVasculature", None, "AverageInflow",
-                                             "VolumePerTimeUnit", "mL_Per_min"),
     ("liver", "tissue_mass_kg"): ("tissue", "LiverTissue", None, "TotalMass", "MassUnit", "kg"),
-    ("sources", "aorta", "insulin_pmol_per_L"): ("cmpt_sub", "Aorta", "Insulin", "Molarity",
-                                                 "AmountPerVolumeUnit", "pmol_Per_L"),
-    ("sources", "splanchnic", "insulin_pmol_per_L"): ("cmpt_sub", "SplanchnicVasculature", "Insulin",
-                                                      "Molarity", "AmountPerVolumeUnit", "pmol_Per_L"),
-    ("sources", "splanchnic", "average_outflow_mL_per_min"): ("cmpt", "SplanchnicVasculature", None,
-                                                              "AverageOutflow", "VolumePerTimeUnit",
-                                                              "mL_Per_min"),
-    ("sources", "spleen", "average_outflow_mL_per_min"): ("cmpt", "SpleenVasculature", None,
-                                                          "AverageOutflow", "VolumePerTimeUnit",
-                                                          "mL_Per_min"),
+    # Not a module output: the same insulin as a mass concentration, to check the unit.
+    ("check", "insulin_ug_per_L"): ("cmpt_sub", "LiverVasculature", "Insulin", "Concentration",
+                                    "MassPerVolumeUnit", "ug_Per_L"),
 }
-PORTAL = ("large_intestine", "small_intestine", "splanchnic", "spleen")
 
 
 def _direct_engine(paths):
@@ -45,8 +36,6 @@ def _direct_engine(paths):
         if kind == "cmpt_sub":
             requests.append(SEDataRequest.create_liquid_compartment_substance_request(
                 compartment, substance, prop, unit=unit))
-        elif kind == "cmpt":
-            requests.append(SEDataRequest.create_liquid_compartment_request(compartment, prop, unit=unit))
         else:
             requests.append(SEDataRequest.create_tissue_request(compartment, prop, unit=unit))
     engine = PulseEngine(eModelType.HumanAdultWholeBody, f"{bin_dir}/")
@@ -65,32 +54,17 @@ def _at(tree, path):
 
 def test_first_row_equals_a_direct_engine(run_composite):
     """Falsifies: a hepatic reading is mapped to the wrong compartment, substance,
-    property or unit (each spelled independently in ORACLE)."""
+    property or unit (each spelled independently in ORACLE). Liver insulin in
+    pmol/L must also equal Pulse's own mass concentration over its molar mass."""
     paths = list(ORACLE)
-    oracle = _direct_engine(paths)
+    oracle = dict(zip(paths, _direct_engine(paths)))
     _, rows = run_composite(pulse_hepatic, 1)
     hepatic = rows[0]["circuits"]["hepatic"]
-    for path, expected in zip(paths, oracle):
+    for path, expected in oracle.items():
         assert math.isfinite(expected), path
-        assert _at(hepatic, path) == pytest.approx(expected, rel=1e-9), path
-
-
-def test_cycle_averaged_inlet_is_smooth_and_above_the_liver_value(run_composite):
-    """Falsifies: the flows are instantaneous rather than cycle-averaged. Sampled once
-    a second, instantaneous flows made the flow-weighted inlet concentration jump
-    0.96-1.60 x the liver value tick to tick (measured over 120 s). With Pulse's
-    cardiac-cycle averages it moved 1.16-1.21 x, at most 0.003 per tick, and stayed
-    above the liver value, as an organ that clears insulin requires."""
-    _, rows = run_composite(pulse_hepatic, 60)
-    ratios = []
-    for row in rows:
-        h = row["circuits"]["hepatic"]
-        q_in = h["liver"]["average_inflow_mL_per_min"]
-        portal = [(h["sources"][s]["insulin_pmol_per_L"], h["sources"][s]["average_outflow_mL_per_min"])
-                  for s in PORTAL]
-        q_artery = q_in - sum(q for _, q in portal)
-        assert q_artery > 0.1 * q_in
-        c_in = (sum(c * q for c, q in portal) + h["sources"]["aorta"]["insulin_pmol_per_L"] * q_artery) / q_in
-        ratios.append(c_in / h["liver"]["insulin_pmol_per_L"])
-    assert min(ratios) > 1.0
-    assert max(abs(b - a) for a, b in zip(ratios, ratios[1:])) < 0.01
+        if path[0] != "check":
+            assert _at(hepatic, path) == pytest.approx(expected, rel=1e-9), path
+    molar_mass = json.loads((ensure_pulse_importable() / "substances" / "Insulin.json").read_text())
+    g_per_mol = molar_mass["MolarMass"]["ScalarMassPerAmount"]["Value"]
+    pmol_per_L = oracle[("check", "insulin_ug_per_L")] * 1e-6 / g_per_mol * 1e12
+    assert hepatic["liver"]["insulin_pmol_per_L"] == pytest.approx(pmol_per_L, rel=1e-9)

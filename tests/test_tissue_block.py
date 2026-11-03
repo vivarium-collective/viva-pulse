@@ -10,7 +10,8 @@ import math
 
 import pytest
 
-pytest.importorskip("viva_copasi")
+# Import COPASI through the cell module, which keeps the process locale (see test below).
+pytest.importorskip("viva_pulse.multiscale.cells")
 
 from basico import run_steadystate, set_species  # noqa: E402
 from process_bigraph import Composite, allocate_core, gather_emitter_results  # noqa: E402
@@ -19,7 +20,7 @@ from viva_copasi.processes import CopasiUTCProcess  # noqa: E402
 from viva_pulse.composites import liver_tissue_replay, pulse_hepatic, pulse_liver_tissue  # noqa: E402
 from viva_pulse.core import build_core  # noqa: E402
 from viva_pulse.multiscale import KOSCHORRECK_2008, register_multiscale, save_hepatic_trajectory  # noqa: E402
-from viva_pulse.multiscale.tissue import HEPATIC_PATHS, HepaticGradient  # noqa: E402
+from viva_pulse.multiscale.tissue import HEPATIC_PATHS  # noqa: E402
 
 BOUND = ("IR", "I2R", "IRp", "I2Rp", "IRen", "I2Ren", "IRPen", "I2RPen")  # insulin-bound receptor states
 RECEPTOR = BOUND + ("R", "Rp", "Ren", "RPen")
@@ -43,8 +44,8 @@ def recorded(tmp_path_factory):
 
 
 def _synthetic(recorded, tmp_path, *, seconds, step_at, factor):
-    """Pulse's t=0 hepatic values held constant, with every insulin value x ``factor``
-    from ``step_at`` on (the inlet/mean ratio, and so the gradient shape, unchanged)."""
+    """Pulse's t=0 hepatic values held constant, with liver insulin x ``factor``
+    from ``step_at`` on."""
     base = json.loads(recorded.read_text())
     values = {}
     for key, series in base["values"].items():
@@ -79,18 +80,28 @@ def _bound(cells):
 # -- live Pulse ---------------------------------------------------------------------
 
 
-def test_gradient_keeps_pulse_mean_and_falls_from_the_inlet():
+def test_extraction_keeps_pulse_mean_and_removes_the_configured_fraction():
     """Falsifies: the strata don't average to Pulse's liver value (the block would
-    invent or lose insulin), or the gradient points the wrong way. Pulse's own
-    liver insulin, emitted alongside, is the reference."""
-    rows = _run(pulse_liver_tissue, 20, strata=4)
+    invent or lose insulin), or the inlet-to-outlet drop isn't the configured
+    extraction. References: Pulse's own liver insulin, emitted alongside, and E."""
+    extraction = 0.4
+    rows = _run(pulse_liver_tissue, 20, strata=4, extraction=extraction)
     for row in rows:
         liver_nM = row["circuits"]["hepatic"]["liver"]["insulin_pmol_per_L"] / 1000.0
         drive = [row["tissue"]["drive"][f"s{i}"]["ins"] for i in range(4)]
         assert sum(drive) / 4 == pytest.approx(liver_nM, rel=1e-12)
-        assert drive == sorted(drive, reverse=True) and drive[0] > drive[-1]
-        # Linear in position: extrapolating strata 0 and 1 (x = 1/8, 3/8) to x = 0 gives the inlet.
-        assert drive[0] + (drive[0] - drive[1]) / 2 == pytest.approx(row["tissue"]["gradient"]["inlet_nM"], rel=1e-12)
+        # Linear in position (midpoints x = 1/8 ... 7/8): extrapolate to the inlet (x = 0) and outlet (x = 1).
+        step = drive[1] - drive[0]
+        inlet, outlet = drive[0] - step / 2, drive[3] + step / 2
+        assert outlet / inlet == pytest.approx(1.0 - extraction, rel=1e-12)
+
+
+def test_no_extraction_gives_every_stratum_pulse_value():
+    """Falsifies: the default (E = 0, Pulse's own liver clears no insulin) varies across strata."""
+    rows = _run(pulse_liver_tissue, 5, strata=3)
+    for row in rows:
+        liver_nM = row["circuits"]["hepatic"]["liver"]["insulin_pmol_per_L"] / 1000.0
+        assert [row["tissue"]["drive"][f"s{i}"]["ins"] for i in range(3)] == pytest.approx([liver_nM] * 3, rel=1e-15)
 
 
 def test_the_block_leaves_pulse_unchanged():
@@ -112,9 +123,9 @@ def test_the_block_leaves_pulse_unchanged():
 def test_replay_reproduces_the_live_block(tmp_path):
     """Falsifies: the replay variant is not the live block's science. Replaying the
     live run's own hepatic reads must give the same cells."""
-    live = _run(pulse_liver_tissue, 20, strata=3)
+    live = _run(pulse_liver_tissue, 20, strata=3, extraction=0.5)
     trajectory = save_hepatic_trajectory(live, tmp_path / "live.json")
-    replay = _run(liver_tissue_replay, 20, trajectory_file=str(trajectory), strata=3)
+    replay = _run(liver_tissue_replay, 20, trajectory_file=str(trajectory), strata=3, extraction=0.5)
     for a, b in zip(live, replay):
         assert a["tissue"]["drive"] == b["tissue"]["drive"]
         for name, cells in a["tissue"]["cells"].items():
@@ -204,6 +215,8 @@ def test_amounts_follow_the_paper_geometry(recorded):
 
 @pytest.mark.parametrize("params, match", [
     ({"strata": 0}, "strata"),
+    ({"extraction": 1.5}, "extraction"),
+    ({"extraction": -0.1}, "extraction"),
     ({"subpopulations": {"a": {"weight": 0.5}}}, "sum to 1"),
     ({"subpopulations": {"a": {"weight": 1.0, "rate": 2}}}, "unexpected keys"),
     ({"subpopulations": {}}, "at least one"),
@@ -212,6 +225,26 @@ def test_amounts_follow_the_paper_geometry(recorded):
 def test_generator_validates_when_building(params, match):
     with pytest.raises((ValueError, TypeError), match=match):
         pulse_liver_tissue(None, **params)
+
+
+def test_importing_the_cell_module_keeps_the_text_encoding():
+    """Falsifies: loading the tissue block turns the process's default text encoding
+    into ASCII (a bare COPASI import does: it sets the locale to "C"), which broke
+    later non-ASCII file reads in the same process, e.g. the docs test."""
+    import os
+    import subprocess
+    import sys
+
+    probe = ("import locale; before = locale.getpreferredencoding(False); import {}; "
+             "print(before, locale.getpreferredencoding(False))")
+    env = {**os.environ, "LC_ALL": "", "LANG": "en_US.UTF-8"}
+    outputs = {}
+    for module in ("COPASI", "viva_pulse.multiscale.cells"):
+        result = subprocess.run([sys.executable, "-c", probe.format(module)], capture_output=True, text=True,
+                                env=env, timeout=120, check=True)
+        outputs[module] = result.stdout.split()[-2:]
+    assert outputs["COPASI"] == ["UTF-8", "US-ASCII"]  # the defect being contained
+    assert outputs["viva_pulse.multiscale.cells"] == ["UTF-8", "UTF-8"]
 
 
 def test_unknown_cell_parameter_fails_at_construction():
@@ -229,15 +262,12 @@ def test_missing_drive_fails_instead_of_running_on_the_file_value():
         process.update({"species_counts": {}, "species_concentrations": {}}, 1.0)
 
 
-def test_negative_stratum_raises():
-    """An inlet more than twice the mean would push the linear profile's outlet strata below zero."""
-    gradient = HepaticGradient({"strata": 3}, core=build_core())
-    hepatic = {"liver": {"insulin_pmol_per_L": 100.0, "average_inflow_mL_per_min": 1000.0, "tissue_mass_kg": 1.8},
-               "sources": {"aorta": {"insulin_pmol_per_L": 300.0},
-                           **{s: {"insulin_pmol_per_L": 300.0, "average_outflow_mL_per_min": 100.0}
-                              for s in ("large_intestine", "small_intestine", "splanchnic", "spleen")}}}
-    with pytest.raises(ValueError, match="below zero"):
-        gradient.update({"hepatic": hepatic})
+def test_insulin_above_the_cell_model_bound_raises(recorded, tmp_path):
+    """Falsifies: a drive outside the cell model's trusted range passes silently. The
+    synthetic trajectory multiplies insulin past the bound at t = 3."""
+    over = _synthetic(recorded, tmp_path, seconds=10, step_at=3, factor=1e4)
+    with pytest.raises(ValueError, match="above the cell model's bound"):
+        _run(liver_tissue_replay, 10, trajectory_file=str(over), max_insulin_nM=100.0)
 
 
 def test_replay_rejects_a_trajectory_with_other_paths(tmp_path):

@@ -12,5 +12,9 @@ this page gives the call signatures.
    :undoc-members:
 
 .. automodule:: viva_pulse.composites.circuits
-   :members: pulse_cardiovascular, pulse_respiratory, pulse_mechanical_ventilation, pulse_thermal, pulse_supplemental_oxygen, pulse_whole_body_circuits, circuit_node, circuit_emitter
+   :members: pulse_cardiovascular, pulse_respiratory, pulse_mechanical_ventilation, pulse_thermal, pulse_supplemental_oxygen, pulse_substances, pulse_hepatic, pulse_whole_body_circuits, circuit_node, circuit_emitter
+   :undoc-members:
+
+.. automodule:: viva_pulse.composites.tissue
+   :members: pulse_liver_tissue, liver_tissue_replay
    :undoc-members:

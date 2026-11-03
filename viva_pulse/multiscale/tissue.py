@@ -4,11 +4,14 @@ Pulse treats the liver's blood as one well-mixed compartment. The block spreads
 that value along the sinusoid, inlet to outlet, over ``strata`` equal-volume
 strata, and runs a population of cell models in each:
 
-- ``HepaticGradient``: local insulin per stratum. Linear in position x (0 at the
-  inlet, 1 at the outlet), equal to Pulse's flow-weighted inlet concentration at
-  x = 0, with a volume-weighted mean equal to Pulse's liver value:
-  ``c(x) = mean + (inlet - mean) * (1 - 2x)``, sampled at each stratum's midpoint.
-  One stratum gives every cell the liver value. A negative stratum raises.
+- ``HepaticGradient``: local insulin per stratum. A configured fraction
+  ``extraction`` (E) of the insulin entering the liver is removed by the outlet,
+  linearly in position x (0 at the inlet, 1 at the outlet), and the
+  volume-weighted mean equals Pulse's liver value:
+  ``c(x) = mean * (1 - E x) / (1 - E / 2)``, sampled at each stratum's midpoint.
+  E = 0 (the default) gives every cell Pulse's value, which is what Pulse's own
+  liver implies: Pulse clears insulin at the vena cava, not in the liver.
+  A stratum above ``max_nM`` raises.
 - ``TissueAggregate``: weighted statistics of the cell instances, per-cell
   molecule counts and liver totals.
 - ``HepaticReplay``: replays a recorded hepatic trajectory in Pulse's place, so
@@ -17,8 +20,8 @@ strata, and runs a population of cell models in each:
 Nothing flows back to Pulse: receptor binding here does not remove insulin from
 Pulse's blood. The block is a readout of Pulse, not feedback into it.
 
-The linear profile and the subpopulation parameter sets are provisional
-modelling choices, not validated physiology.
+The extraction profile, its bound and the subpopulation parameter sets are
+provisional modelling choices, not validated physiology.
 """
 
 from __future__ import annotations
@@ -29,7 +32,7 @@ from pathlib import Path
 
 from process_bigraph import Process, Step
 
-from ..circuits.hepatic import HEPATIC, PORTAL_SOURCES
+from ..circuits.hepatic import HEPATIC
 from ..processes import _nest
 
 #: Koschorreck & Gilles 2008 (BMC Syst Biol 2:43), BioModels BIOMD0000000345 (CC0):
@@ -48,53 +51,50 @@ def strata_positions(strata: int) -> list[float]:
     return [(i + 0.5) / strata for i in range(strata)]
 
 
-def inlet_nM(hepatic: dict) -> float:
-    """Flow-weighted insulin entering the liver, in nM, from the hepatic reads.
-
-    The hepatic artery's flow is the liver inflow minus the portal outflows; it
-    carries aortic blood.
-    """
-    q_in = hepatic["liver"]["average_inflow_mL_per_min"]
-    portal = [(hepatic["sources"][s]["insulin_pmol_per_L"], hepatic["sources"][s]["average_outflow_mL_per_min"])
-              for s in PORTAL_SOURCES]
-    q_artery = q_in - sum(q for _, q in portal)
-    if q_in <= 0 or q_artery < 0:
-        raise ValueError(f"liver inflow {q_in} mL/min is below the portal outflows "
-                         f"{sum(q for _, q in portal)} mL/min")
-    supplied = sum(c * q for c, q in portal) + hepatic["sources"]["aorta"]["insulin_pmol_per_L"] * q_artery
-    return supplied / q_in / 1000.0
+def check_extraction(extraction: float) -> float:
+    """The extraction fraction must lie in [0, 1]: beyond 1 the outlet strata go negative."""
+    if not 0.0 <= extraction <= 1.0:
+        raise ValueError(f"extraction must be between 0 and 1, got {extraction}")
+    return extraction
 
 
 class HepaticGradient(Step):
-    """Pulse's hepatic reads -> the insulin each stratum's cells see (see module docstring)."""
+    """Pulse's liver insulin -> the insulin each stratum's cells see (see module docstring).
+
+    ``max_nM`` is the upper end of the drive the cell model is trusted at. The
+    default, 100 nM, is the highest insulin level Koschorreck 2008 validates
+    against: receptor internalization at 100 nM and at zero insulin (Backer et
+    al., its ref. 34, whose models fitted at those two levels supply three of its
+    parameters). The paper says the model is not valid at extremely high insulin
+    without giving a limit, so this bound is provisional.
+    """
 
     config_schema = {
         "strata": {"_type": "integer", "_default": 1},
+        "extraction": {"_type": "float", "_default": 0.0},
+        "max_nM": {"_type": "float", "_default": 100.0},
         "species": {"_type": "string", "_default": "ins"},
     }
 
     def initialize(self, config=None):
         self._x = strata_positions(int(self.config["strata"]))
+        extraction = check_extraction(float(self.config["extraction"]))
+        self._profile = [(1.0 - extraction * x) / (1.0 - extraction / 2.0) for x in self._x]
 
     def inputs(self):
         return {"hepatic": _nest([(path, "float") for path in HEPATIC_PATHS])}
 
     def outputs(self):
-        return {"drive": {f"s{i}": "overwrite[map[float]]" for i in range(len(self._x))},
-                "inlet_nM": "overwrite[float]",
-                "mean_nM": "overwrite[float]"}
+        return {"drive": {f"s{i}": "overwrite[map[float]]" for i in range(len(self._x))}}
 
     def update(self, state, interval=None):
-        hepatic = state["hepatic"]
-        mean = hepatic["liver"]["insulin_pmol_per_L"] / 1000.0
-        inlet = inlet_nM(hepatic)
-        local = [mean + (inlet - mean) * (1.0 - 2.0 * x) for x in self._x]
-        if min(local) < 0.0:
-            raise ValueError(f"stratum insulin below zero ({min(local)} nM): the inlet {inlet} nM is more "
-                             f"than twice the liver mean {mean} nM, outside the linear profile")
+        mean = state["hepatic"]["liver"]["insulin_pmol_per_L"] / 1000.0
+        local = [mean * g for g in self._profile]
+        if max(local) > self.config["max_nM"]:
+            raise ValueError(f"stratum insulin {max(local)} nM is above the cell model's bound "
+                             f"{self.config['max_nM']} nM")
         species = self.config["species"]
-        return {"drive": {f"s{i}": {species: c} for i, c in enumerate(local)},
-                "inlet_nM": inlet, "mean_nM": mean}
+        return {"drive": {f"s{i}": {species: c} for i, c in enumerate(local)}}
 
 
 class TissueAggregate(Step):

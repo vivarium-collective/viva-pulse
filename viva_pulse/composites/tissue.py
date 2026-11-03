@@ -3,7 +3,6 @@
 Store layout:
 - ``circuits/hepatic/``: the liver's blood supply, from Pulse or a replay;
 - ``tissue/drive/s<i>``: the insulin each stratum's cells see (``{"ins": nM}``);
-- ``tissue/gradient/``: the inlet and mean insulin (nM) the drive was built from;
 - ``tissue/cells/s<i>_<subpopulation>``: each instance's species (nM);
 - ``tissue/summary/<statistic>``: weighted statistics and amounts per species;
 - a ``RAMEmitter`` at ``emitter`` recording ``circuits``, ``tissue`` and time.
@@ -22,16 +21,23 @@ from process_bigraph.composite_generator import composite_generator
 
 from ..core import register_processes
 from ..multiscale import KOSCHORRECK_2008, register_multiscale
-from ..multiscale.tissue import strata_positions
+from ..multiscale.tissue import check_extraction, strata_positions
 from .circuits import _INTERVAL, _STATE_FILE, _reject_unknown, circuit_node
 
 DEFAULT_SUBPOPULATIONS = {"hepatocyte": {"weight": 1.0, "parameters": {}}}
 SUMMARY = ("mean_nM", "sd_nM", "min_nM", "max_nM", "molecules_per_cell", "tissue_total_nmol", "cell_count")
 
 _BLOCK_PARAMETERS = {
-    "strata": {"type": "integer", "default": 3,
+    "strata": {"type": "integer", "default": 1,
                "description": "Equal-volume strata along the sinusoid, inlet first; 1 = every cell sees "
                               "Pulse's liver value"},
+    "extraction": {"type": "float", "default": 0.0,
+                   "description": "Fraction of the liver's incoming insulin removed by the outlet (0-1), linear "
+                                  "along the sinusoid, mean held at Pulse's value. 0 = uniform, as in Pulse, whose "
+                                  "liver clears no insulin. Provisional: a modeler's choice"},
+    "max_insulin_nM": {"type": "float", "default": 100.0,
+                       "description": "Fail if any stratum's insulin exceeds this; 100 nM is the highest level "
+                                      "Koschorreck 2008 validates against (provisional)"},
     "subpopulations": {"type": "map", "default": DEFAULT_SUBPOPULATIONS,
                        "description": "Cell subpopulations in every stratum: name -> {weight, parameters}. "
                                       "Weights sum to 1; parameters override fixed quantities of the "
@@ -59,8 +65,9 @@ def _instances(strata, subpopulations):
             for i in range(strata) for name in subpopulations}
 
 
-def _block(source, *, strata, subpopulations, equilibrate, interval):
+def _block(source, *, strata, extraction, max_insulin_nM, subpopulations, equilibrate, interval):
     instances = _instances(strata, subpopulations)
+    check_extraction(extraction)
     cells = {
         f"cell_{name}": {
             "_type": "process",
@@ -79,10 +86,9 @@ def _block(source, *, strata, subpopulations, equilibrate, interval):
         "gradient": {
             "_type": "step",
             "address": "local:HepaticGradient",
-            "config": {"strata": strata},
+            "config": {"strata": strata, "extraction": extraction, "max_nM": max_insulin_nM},
             "inputs": {"hepatic": ["circuits", "hepatic"]},
-            "outputs": {"drive": ["tissue", "drive"], "inlet_nM": ["tissue", "gradient", "inlet_nM"],
-                        "mean_nM": ["tissue", "gradient", "mean_nM"]},
+            "outputs": {"drive": ["tissue", "drive"]},
         },
         **cells,
         "aggregate": {
@@ -109,18 +115,20 @@ def _block(source, *, strata, subpopulations, equilibrate, interval):
 @composite_generator(
     name="pulse_liver_tissue",
     description="Real whole-body Pulse over a stratified liver tissue block: Pulse's liver insulin, spread "
-                "inlet-to-outlet over equal-volume strata, drives Koschorreck 2008 hepatocyte insulin-receptor "
-                "models in COPASI, one per stratum and subpopulation. One-way: the cells never change Pulse.",
+                "inlet-to-outlet over equal-volume strata by a configured extraction, drives Koschorreck 2008 "
+                "hepatocyte insulin-receptor models in COPASI, one per stratum and subpopulation. One-way: the "
+                "cells never change Pulse.",
     parameters={"state_file": _STATE_FILE, **_BLOCK_PARAMETERS},
     core_extensions=[register_processes, register_multiscale],
     default_n_steps=600,
     fidelity="real-bridge",
 )
-def pulse_liver_tissue(core=None, *, state_file="StandardMale@0s.json", strata=3, subpopulations=None,
-                       equilibrate=True, interval=1.0, **overrides):
+def pulse_liver_tissue(core=None, *, state_file="StandardMale@0s.json", strata=1, extraction=0.0,
+                       max_insulin_nM=100.0, subpopulations=None, equilibrate=True, interval=1.0, **overrides):
     _reject_unknown(overrides)
     return _block({"pulse": circuit_node(["hepatic"], state_file=state_file, interval=interval)},
-                  strata=strata, subpopulations=DEFAULT_SUBPOPULATIONS if subpopulations is None else subpopulations,
+                  strata=strata, extraction=extraction, max_insulin_nM=max_insulin_nM,
+                  subpopulations=DEFAULT_SUBPOPULATIONS if subpopulations is None else subpopulations,
                   equilibrate=equilibrate, interval=interval)
 
 
@@ -135,13 +143,14 @@ def pulse_liver_tissue(core=None, *, state_file="StandardMale@0s.json", strata=3
     default_n_steps=600,
     fidelity="real-bridge",
 )
-def liver_tissue_replay(core=None, *, trajectory_file="", strata=3, subpopulations=None, equilibrate=True,
-                        interval=1.0, **overrides):
+def liver_tissue_replay(core=None, *, trajectory_file="", strata=1, extraction=0.0, max_insulin_nM=100.0,
+                        subpopulations=None, equilibrate=True, interval=1.0, **overrides):
     _reject_unknown(overrides)
     if not trajectory_file:
         raise ValueError("trajectory_file is required")
     replay = {"_type": "process", "address": "local:HepaticReplay", "interval": interval,
               "config": {"trajectory_file": str(trajectory_file)},
               "outputs": {"hepatic": ["circuits", "hepatic"]}}
-    return _block({"replay": replay}, strata=strata, subpopulations=DEFAULT_SUBPOPULATIONS if subpopulations is None else subpopulations,
+    return _block({"replay": replay}, strata=strata, extraction=extraction, max_insulin_nM=max_insulin_nM,
+                  subpopulations=DEFAULT_SUBPOPULATIONS if subpopulations is None else subpopulations,
                   equilibrate=equilibrate, interval=interval)

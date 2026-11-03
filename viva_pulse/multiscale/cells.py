@@ -7,8 +7,18 @@ importable without COPASI.
 
 from __future__ import annotations
 
-from basico import get_parameters, run_steadystate, set_parameters, set_species
-from viva_copasi.processes import CopasiUTCProcess
+import locale
+
+# Importing COPASI (python-copasi 4.48) sets the whole process locale to "C", and
+# Python's default text encoding becomes ASCII for everything after it: any
+# open()/read_text() without an encoding then fails on non-ASCII files. Restore the
+# character-type category. COPASI's number parsing depends on LC_NUMERIC, which
+# Python keeps at "C" anyway. Only the first import changes the locale.
+_ctype = locale.setlocale(locale.LC_CTYPE)
+from basico import get_parameters, run_steadystate, set_parameters, set_species  # noqa: E402
+from viva_copasi.processes import CopasiUTCProcess  # noqa: E402
+
+locale.setlocale(locale.LC_CTYPE, _ctype)
 
 # basico.run_steadystate status codes that mean a steady state was reached.
 _STEADY = (1, 2)

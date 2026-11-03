@@ -79,7 +79,7 @@ Code: `viva_pulse/circuits/hepatic.py`, `viva_pulse/multiscale/`, `viva_pulse/co
 | Gate | Result | Evidence |
 |---|---|---|
 | Tissue `TotalMass` | 1.8 kg, constant | live request `LiverTissue/TotalMass` |
-| Five inflow concentrations and flows | All served. Instantaneous flows unusable: inlet/mean swings 0.96–1.60 per 1 s tick. Pulse's cycle averages (`AverageInflow`/`AverageOutflow`) give 1.16–1.21, sd 0.018. Hepatic-artery flow = liver inflow − portal outflows (373 of 1348 mL/min). | probes; `CardiovascularModel.cpp:913-928` |
+| Five inflow concentrations and flows | Not used. Pulse's liver extracts no insulin: insulin is cleared at the vena cava (`DrugModel::CalculateSubstanceClearance`; no hepatic clearance in `Insulin.json`). A portal vessel's `AverageOutflow` also counts its flow into gut or spleen tissue (splanchnic 61.4 vs path 51.9 mL/min). True path flows put the inlet about 2.7% above the liver value, which is well-mixed lag while insulin rises, and 1 s means of them keep ±1% beat ripple. A first build used `AverageOutflow`, and the adversarial review caught it: its gradient was about 5x too steep. | engine source; path-flow probe at 0.02 s |
 | Per-cell mass, exchange flux | Per-cell amount from the paper's geometry: 20 µm sphere, 40 nM = 10⁵ receptors per cell; hepatocytes 78% of liver volume; density 1051 g/L. Gives 3.19×10¹¹ cells. No exchange flux: one-way. | Koschorreck 2008 text and Table 1 |
 | Cell-model parameters and concentrations | viva-copasi, not simbio. `species_counts` sets *concentrations* and wins when non-empty, so it is not a units question. Per-subpopulation parameters are set on fixed global quantities. | `viva_copasi/processes.py:853-856` |
 | Runtime of S × C × Q solves | 0.38 ms per instance-second; not a gate | probe |
@@ -87,7 +87,9 @@ Code: `viva_pulse/circuits/hepatic.py`, `viva_pulse/multiscale/`, `viva_pulse/co
 Corrections to the design above:
 - **Driver.** The cells read Pulse's *vascular* liver insulin. Liver tissue insulin is frozen at its initial value in Pulse (0.412 µg/L), and whole-blood `BloodConcentration` (0.48 µg/L) is not what the liver sees (0.93 µg/L, portal).
 - **Units.** Koschorreck 2008 is in seconds and nM. Pulse reports `Molarity` in pmol/L with its own molar mass. The Phase 0 smoke run fed pmol/L as nM, 1000× too high.
-- **Gradient.** Linear in position: `c(x) = mean + (inlet − mean)(1 − 2x)`, sampled at the strata midpoints (provisional shape). Classes × parameter sets are one flat list of weighted subpopulations.
+- **Gradient.** A configured hepatic `extraction` E: `c(x) = mean (1 − E x)/(1 − E/2)` at the strata midpoints, so outlet/inlet = 1 − E and the mean is Pulse's value. The default, E = 0, is uniform, which is what Pulse's own liver implies. Linear shape and E are provisional. Classes × parameter sets are one flat list of weighted subpopulations.
+- **Viability bound.** A stratum above `max_insulin_nM` (default 100 nM, the highest level Koschorreck 2008 validates against) raises.
+- **Uptake vs Pulse's liver exchange.** Not applicable: Pulse's liver exchange of insulin is zero by construction.
 - **Output formula.** Strata carry a volume weight: output = N × Σ_s v_s Σ_p π_p y(s,p), with v_s = 1/S.
 - **Start.** Cells start at COPASI's steady state for their first drive. From the file's insulin-free state they need 30–60 min to settle, longer than a typical run.
 - **Next-step 1.** Done: the synthetic step control, the lag check against aligned and one-second-early standalone runs, and the stated passive readout (Pulse is unchanged with the block attached).
@@ -109,7 +111,7 @@ Pulse region ──▶ Map{ region → lower-scale composite }     (organ index:
 ```
 - One model instance per Pulse region or organ, via the `viva-human-atlas` index [A]; results aggregate by region.
 - **tyssue's place:** a tissue instance for an epithelium (its `hra_colon_surface` and `hra_crypt_field` composites exist [A]). Pulse reaches it only through a hand-written adapter that emits `update_parameter` behaviors [V]. That mapping is unassessed, not "most speculative"; I have not read enough to rank it. Pulse has no colon compartment [U], and the fork pin is the only install evidence [V].
-- Gates: a `Map` of nested composites [U]; the compartment→organ mapping (Pulse names are unmapped) [U].
+- Gates: the compartment→organ mapping (Pulse names are unmapped) [U]. The `Map` gate is resolved: process-bigraph 1.11 has no `Map` construct (no such class in the installed package, 2026-11-03), so an ensemble is a generator that emits one instance per region in a flat document. Design 1's `pulse_liver_tissue` already does this per stratum and subpopulation.
 - Fails when: instance count makes cost prohibitive, or the region→tissue mapping has no physical basis.
 
 ### Design 4 — Surrogate-compressed

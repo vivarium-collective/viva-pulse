@@ -396,9 +396,8 @@ def pulse_substances(core=None, *, model_type="whole_body", state_file="Standard
 
 @composite_generator(
     name="pulse_hepatic",
-    description="The liver's blood supply in the real whole-body engine: liver and feeding-vessel "
-                "insulin, cycle-averaged liver inflow and portal outflows, liver tissue mass. "
-                "Read-only: no setpoints.",
+    description="Liver insulin (vascular, pmol/L) and liver tissue mass in the real whole-body engine, "
+                "the reads a liver tissue model needs. Read-only: no setpoints.",
     parameters={
         "model_type": {"type": "string", "default": "whole_body", "choices": ["whole_body"],
                        "description": "Pulse engine running the circuits"},
@@ -428,8 +427,9 @@ WHOLE_BODY_MODULES =(CARDIOVASCULAR, RESPIRATORY, MECHANICAL_VENTILATOR, THERMAL
 @composite_generator(
     name="pulse_whole_body_circuits",
     description="Every circuit module on one real whole-body Pulse engine: cardiovascular (with renal "
-                "and tissue branches), respiratory, mechanical ventilator, thermal and supplemental "
-                "oxygen, so effects that cross circuits appear in one run. All setpoints start at "
+                "and tissue branches), respiratory, mechanical ventilator, thermal, supplemental "
+                "oxygen, blood substances and the liver's blood supply, so effects that cross circuits "
+                "appear in one run. All setpoints start at "
                 "their baselines; the ventilator and oxygen start disconnected, and only one of them "
                 "can be connected at a time.",
     parameters={

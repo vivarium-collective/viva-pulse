@@ -92,15 +92,15 @@ rows = gather_emitter_results(sim)[("emitter",)]
 | `liver_tissue_replay` | The liver tissue block of pulse_liver_tissue driven by a recorded hepatic trajectory instead of the engine (save one with viva_pulse.multiscale.save_hepatic_trajectory). |
 | `pulse_cardiovascular` | The Pulse cardiovascular circuit (with its renal and tissue branches) in the real whole-body engine: per-compartment pressures, volumes and flows plus hemodynamic vitals, driven by circuit resistance… |
 | `pulse_hemorrhage` | Untreated hemorrhage in the real Pulse whole-body adult engine; emits vital signs every second. |
-| `pulse_hepatic` | The liver's blood supply in the real whole-body engine: liver and feeding-vessel insulin, cycle-averaged liver inflow and portal outflows, liver tissue mass. |
-| `pulse_liver_tissue` | Real whole-body Pulse over a stratified liver tissue block: Pulse's liver insulin, spread inlet-to-outlet over equal-volume strata, drives Koschorreck 2008 hepatocyte insulin-receptor models in COPAS… |
+| `pulse_hepatic` | Liver insulin (vascular, pmol/L) and liver tissue mass in the real whole-body engine, the reads a liver tissue model needs. |
+| `pulse_liver_tissue` | Real whole-body Pulse over a stratified liver tissue block: Pulse's liver insulin, spread inlet-to-outlet over equal-volume strata by a configured extraction, drives Koschorreck 2008 hepatocyte insul… |
 | `pulse_mechanical_ventilation` | A patient on a pressure-control mechanical ventilator in the real Pulse engine: the respiratory circuit combined with the ventilator circuit, emitting breathing mechanics, lung compartments and the v… |
 | `pulse_respiratory` | The Pulse respiratory (airway) circuit, alone in the VentilationMechanics engine or coupled in the whole-body engine: breathing mechanics plus per-compartment lung and pleural pressures, volumes and… |
 | `pulse_resuscitation` | Hemorrhage in the real Pulse engine with a closed-loop MAP-targeted IV fluid controller. |
 | `pulse_substances` | Blood insulin and glucose concentrations in the real whole-body engine, read from Pulse's substance data requests. |
 | `pulse_supplemental_oxygen` | Supplemental oxygen (nasal cannula, simple mask or non-rebreather mask) in the real whole-body engine: the device circuit combined with the respiratory circuit, emitting breathing mechanics, lung com… |
 | `pulse_thermal` | The Pulse temperature circuit (internal core/skin joined to clothing, enclosure and ambient air) in the real whole-body engine: core and skin temperature, sweat, metabolic rate, heat-loss rates and p… |
-| `pulse_whole_body_circuits` | Every circuit module on one real whole-body Pulse engine: cardiovascular (with renal and tissue branches), respiratory, mechanical ventilator, thermal and supplemental oxygen, so effects that cross c… |
+| `pulse_whole_body_circuits` | Every circuit module on one real whole-body Pulse engine: cardiovascular (with renal and tissue branches), respiratory, mechanical ventilator, thermal, supplemental oxygen, blood substances and the l… |
 <!-- END:composites -->
 
 All use `fidelity="real-bridge"`. Each circuit is described in detail under [Pulse circuits](#pulse-circuits) below.
@@ -303,7 +303,7 @@ for label, params in (("room air", {}),
 
 ### Liver tissue under Pulse (experimental)
 
-`pulse_liver_tissue` puts hepatocyte models under the whole body. Pulse treats the liver's blood as one well-mixed compartment. The composite spreads its insulin along the sinusoid over `strata` equal-volume strata, from Pulse's flow-weighted inlet concentration down to the outlet, keeping the average equal to Pulse's liver value. Each stratum's insulin drives a hepatocyte insulin-receptor model in COPASI: Koschorreck & Gilles 2008, BioModels BIOMD0000000345, a rat model. Nothing flows back: receptor binding doesn't remove insulin from Pulse's blood. It needs the `multiscale` extra:
+`pulse_liver_tissue` puts hepatocyte models under the whole body. Pulse treats the liver's blood as one well-mixed compartment. The composite spreads its insulin along the sinusoid over `strata` equal-volume strata: a configured fraction, `extraction`, of the incoming insulin is gone by the outlet, and the average stays equal to Pulse's liver value. The default, 0, gives every stratum Pulse's value, which is what Pulse itself implies: it clears insulin at the vena cava, not in the liver. Each stratum's insulin drives a hepatocyte insulin-receptor model in COPASI: Koschorreck & Gilles 2008, BioModels BIOMD0000000345, a rat model. Nothing flows back: receptor binding doesn't remove insulin from Pulse's blood. It needs the `multiscale` extra:
 
 ```bash
 uv pip install -e '.[multiscale]'
@@ -317,22 +317,23 @@ from viva_pulse.core import build_core
 from viva_pulse.multiscale import register_multiscale
 
 core = register_multiscale(build_core())
-sim = Composite({"state": pulse_liver_tissue(core, strata=3)}, core=core)
+sim = Composite({"state": pulse_liver_tissue(core, strata=3, extraction=0.5)}, core=core)
 sim.run(60)
 tissue = gather_emitter_results(sim)[("emitter",)][-1]["tissue"]
 print({s: round(d["ins"], 3) for s, d in sorted(tissue["drive"].items())})
 print({c: round(v["IRp"], 2) for c, v in sorted(tissue["cells"].items())})
 summary = tissue["summary"]
 print(round(summary["molecules_per_cell"]["IRp"]), f'{summary["cell_count"]:.2e}')
-# {'s0': 0.193, 's1': 0.171, 's2': 0.149}             <- insulin (nM), inlet to outlet
-# {'s0_hepatocyte': 4.57, 's1_hepatocyte': 4.21, 's2_hepatocyte': 3.83}   <- phosphorylated receptor (nM)
-# 10599 3.19e+11                                     <- per cell, and hepatocytes in Pulse's 1.8 kg liver
+# {'s0': 0.209, 's1': 0.171, 's2': 0.133}             <- insulin (nM), inlet to outlet
+# {'s0_hepatocyte': 4.92, 's1_hepatocyte': 4.21, 's2_hepatocyte': 3.43}   <- phosphorylated receptor (nM)
+# 10556 3.19e+11                                     <- per cell, and hepatocytes in Pulse's 1.8 kg liver
 ```
 
 - **Readings.** `tissue/drive` holds each stratum's insulin and `tissue/cells` each instance's receptor states, both in nM. `tissue/summary` holds weighted mean, spread, molecules per cell and whole-liver amounts. Per-cell and whole-liver amounts use the paper's hepatocyte, a 20 µm sphere making up 78% of the liver.
 - **Subpopulations.** `subpopulations` sets cell variants in every stratum, each with a weight and overrides of the model's fixed parameters, e.g. `{"typical": {"weight": 0.75, "parameters": {}}, "fast": {"weight": 0.25, "parameters": {"intk1": 0.0011}}}`.
 - **Start.** Each cell starts at COPASI's steady state for its first insulin value. Starting from the model file's state, insulin-free, it would take 30–60 minutes to settle. Row 0 still holds the file's state.
-- **Provisional.** The linear profile, the rat model and its geometry are placeholders for a modeler's choices, not validated human liver physiology.
+- **Bound.** A stratum's insulin above `max_insulin_nM` (default 100 nM, the highest level the paper validates against) stops the run.
+- **Provisional.** The extraction and its linear profile, the bound, the rat model and its geometry are placeholders for a modeler's choices, not validated human liver physiology.
 - **Without the engine.** `liver_tissue_replay` runs the same tissue from a recorded trajectory, saved with `viva_pulse.multiscale.save_hepatic_trajectory(rows, path)` from any run that emits `circuits/hepatic` (e.g. `pulse_hepatic`).
 
 ## Studies in the workbench
