@@ -73,6 +73,26 @@ Nothing flows back to Pulse.
 - Gates: tissue `TotalMass` [U]; the five inflow concentrations and link flows [U]; per-cell mass and exchange-flux definition [U]; simbio `parameters` and concentration handling [U]; runtime of S × C × Q solves [U].
 - Fails when: the mean-consistency check fails, or the block's uptake disagrees with Pulse's own liver exchange, or runtime is prohibitive.
 
+#### Design 1 as built (2026-11-03, branch `feat/multiscale`)
+Code: `viva_pulse/circuits/hepatic.py`, `viva_pulse/multiscale/`, `viva_pulse/composites/tissue.py` (`pulse_liver_tissue`, `liver_tissue_replay`); tests `tests/test_hepatic.py`, `tests/test_tissue_block.py`.
+
+| Gate | Result | Evidence |
+|---|---|---|
+| Tissue `TotalMass` | 1.8 kg, constant | live request `LiverTissue/TotalMass` |
+| Five inflow concentrations and flows | All served. Instantaneous flows unusable: inlet/mean swings 0.96–1.60 per 1 s tick. Pulse's cycle averages (`AverageInflow`/`AverageOutflow`) give 1.16–1.21, sd 0.018. Hepatic-artery flow = liver inflow − portal outflows (373 of 1348 mL/min). | probes; `CardiovascularModel.cpp:913-928` |
+| Per-cell mass, exchange flux | Per-cell amount from the paper's geometry: 20 µm sphere, 40 nM = 10⁵ receptors per cell; hepatocytes 78% of liver volume; density 1051 g/L. Gives 3.19×10¹¹ cells. No exchange flux: one-way. | Koschorreck 2008 text and Table 1 |
+| Cell-model parameters and concentrations | viva-copasi, not simbio. `species_counts` sets *concentrations* and wins when non-empty, so it is not a units question. Per-subpopulation parameters are set on fixed global quantities. | `viva_copasi/processes.py:853-856` |
+| Runtime of S × C × Q solves | 0.38 ms per instance-second; not a gate | probe |
+
+Corrections to the design above:
+- **Driver.** The cells read Pulse's *vascular* liver insulin. Liver tissue insulin is frozen at its initial value in Pulse (0.412 µg/L), and whole-blood `BloodConcentration` (0.48 µg/L) is not what the liver sees (0.93 µg/L, portal).
+- **Units.** Koschorreck 2008 is in seconds and nM. Pulse reports `Molarity` in pmol/L with its own molar mass. The Phase 0 smoke run fed pmol/L as nM, 1000× too high.
+- **Gradient.** Linear in position: `c(x) = mean + (inlet − mean)(1 − 2x)`, sampled at the strata midpoints (provisional shape). Classes × parameter sets are one flat list of weighted subpopulations.
+- **Output formula.** Strata carry a volume weight: output = N × Σ_s v_s Σ_p π_p y(s,p), with v_s = 1/S.
+- **Start.** Cells start at COPASI's steady state for their first drive. From the file's insulin-free state they need 30–60 min to settle, longer than a typical run.
+- **Next-step 1.** Done: the synthetic step control, the lag check against aligned and one-second-early standalone runs, and the stated passive readout (Pulse is unchanged with the block attached).
+- **Open.** The biology (profile shape, a rat model for a human liver, subpopulation spread) is a modeler's call. StandardMale insulin drifts upward unperturbed (0.93 → 1.13 µg/L in 120 s), so a result needs a baseline run.
+
 ### Design 2 — Peer bus with a return path (two-way)
 ```
 Pulse ──▶ blood bus (stores) ◀── organ / cell / tissue peers write exchange deltas
@@ -119,7 +139,7 @@ Pulse (root, 1 s) ──regional drivers──▶ cell populations per region (a
   - Environment: a shared field, from `viva-pde-particle` or `viva-fenics` [A].
 - Gates:
   - Smoldyn wrapper with an input port, or a documented way to drive it from the hybrid [U].
-  - Cell-to-cell and cell-to-environment interfaces, each a modelling decision for Arnab or Eran.
+  - Cell-to-cell and cell-to-environment interfaces, each a modelling decision.
   - An aggregation rule from cell state to per-region readouts. No org precedent [U].
   - Human parameters for every part. Many do not exist [U].
   - A population size, which is a large multiple of Design 3's instance count [U].
@@ -146,7 +166,7 @@ Run Pulse once, record the driver trajectory, and replay it into the lower scale
 
 ## Recommendation
 
-Begin with **Design 1 plus the replay variant**: it is the only design whose gating facts are all checkable now, and the replay variant lets the lower scale be developed without Pulse in the loop. The reason is risk, not that a flat smoke run already exists. Treat Design 2 as the next step *only after* a modeler approves a sink ledger, because it is the only design with feedback. Treat Design 3 (including tyssue) as an experiment gated on a `Map`-of-composites probe and a compartment mapping. Treat Design 4 as a response to a measured cost, not an assumed one. All biology mappings are for Arnab or Eran.
+Begin with **Design 1 plus the replay variant**: it is the only design whose gating facts are all checkable now, and the replay variant lets the lower scale be developed without Pulse in the loop. The reason is risk, not that a flat smoke run already exists. Treat Design 2 as the next step *only after* a modeler approves a sink ledger, because it is the only design with feedback. Treat Design 3 (including tyssue) as an experiment gated on a `Map`-of-composites probe and a compartment mapping. Treat Design 4 as a response to a measured cost, not an assumed one. All biology mappings are a modeler's call.
 
 ## Next steps once approved (all local)
 1. Make Design 1's first proof honest: a synthetic insulin step as a control, a lag check against a shifted standalone run, and a stated "passive readout" note in its output.

@@ -111,7 +111,7 @@ Output: a short probe report and a filled scoring table. The chain decision come
 - Response: lower-scale output changes monotonically with hemorrhage severity in the pre-registered direction, and does not change at severity 0.
 - Lag and chunking: tests pin the one-interval lag and `run(T)` versus repeated `run(dt)`.
 - Name-collision guard: fails if a lower-scale output lands in an input store.
-- `/adversarial` review of this document and of any code. Any physiological claim is checked by the modeling experts (Arnab or Eran) before it is stated as fact in a repository.
+- `/adversarial` review of this document and of any code. Any physiological claim is checked by a modeler before it is stated as fact in a repository.
 - Every claim in this document cites a file and line, or is marked unverified.
 
 ## Out of scope
@@ -120,7 +120,7 @@ Atomic and quantum coupling; changes to the Pulse engine; the substance and tiss
 
 ## Biological decisions required
 
-Estimates only. Every item is a modeling call. It goes to Arnab or Eran before any code depends on it. Alex decides only if both are unreachable. Each item lists the decision and what it blocks.
+Estimates only. Every item is a modeling call. It needs a modeler's decision before any code depends on it. Each item lists the decision and what it blocks.
 
 | # | Decision | Blocks | Estimate |
 |---|---|---|---|

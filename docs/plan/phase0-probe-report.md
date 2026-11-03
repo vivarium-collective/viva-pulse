@@ -1,6 +1,6 @@
 # Phase 0 probe report
 
-Scope: the probes in `plan-multiscale-composite.md` that need no biology decision. Probes 2 and 6 (which kidney or cardiomyocyte model) wait on B2 and B5, decided by Arnab or Eran.
+Scope: the probes in `plan-multiscale-composite.md` that need no biology decision. Probes 2 and 6 (which kidney or cardiomyocyte model) wait on B2 and B5, both modeling decisions.
 
 Scripts: `docs/plan/phase0-probes/`. Each runs with `-I`. Probe 1 uses a scratch venv with `viva-opencor` (commit `a67510f`) and `viva-copasi` (commit `eed1ca5`, installed, not yet exercised). Probes 3–5 use the viva-pulse `.venv` (process-bigraph 1.11.0, bigraph-schema 1.8.3).
 
