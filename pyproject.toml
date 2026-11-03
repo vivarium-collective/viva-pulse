@@ -40,6 +40,8 @@ workbench = [
     "matplotlib",
     "plotly",
 ]
+# Lower scales under Pulse (viva_pulse.multiscale): cell models in COPASI.
+multiscale = ["viva-copasi"]
 dev = ["viva-pulse[workbench]", "pytest"]
 
 # The user documentation (`make docs`); its tutorials run the real engine, so it
@@ -56,6 +58,7 @@ docs = [
 # that can import PyPulse), so it is pinned to the main commit installed there.
 [tool.uv.sources]
 vivarium-workbench = { git = "https://github.com/vivarium-collective/vivarium-workbench.git", rev = "b74cb02e" }
+viva-copasi = { git = "https://github.com/vivarium-collective/viva-copasi.git", rev = "eed1ca5" }
 
 [tool.hatch.build.targets.wheel]
 packages = ["viva_pulse"]
