@@ -47,6 +47,10 @@ Pulse liver blood: insulin, glucose, lactate, temperature
 - **Stage A:** metabolism plus thermodynamics, next to the receptor model.
 - **Stage B:** the spatial simulator, once its engine (a Smoldyn fork) is built and proven on one cell. Receptor binding then moves from the receptor model to the spatial one.
 
+What the probes found ([cell-content-probes](../plan/cell-content-probes/README.md)):
+- **König's model behaves.** It loads reliably in COPASI, accepts Pulse's insulin, glucose and lactate, and has a steady state at Pulse's liver values. 1 ms per simulated second.
+- **eQuilibrator can score 27 of its 36 reactions.** At König's steady state it finds six reactions running against thermodynamics, whatever the assumed cell conditions. König's own equilibrium constants explain most of it: one is copied from another reaction, one is reversed, two look like mM/M slips. A modeler needs to confirm these before the metabolism results mean anything.
+
 Biology choices that are provisional (a modeler should confirm them):
 - **The receptor model doesn't feed metabolism.** The metabolism model responds to the insulin level directly through a fitted curve; linking it to receptor signalling would need that curve refitted.
 - **The cell's pH, magnesium and ionic strength are assumed:** pH 7.2, pMg 3, ionic strength 0.25 M. Pulse reports pH only in blood and has no magnesium.
