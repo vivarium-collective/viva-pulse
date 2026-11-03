@@ -13,13 +13,14 @@ import pytest
 # Import COPASI through the cell module, which keeps the process locale (see test below).
 pytest.importorskip("viva_pulse.multiscale.cells")
 
-from basico import run_steadystate, set_species  # noqa: E402
+from basico import load_model, run_steadystate, run_time_course, set_parameters, set_species  # noqa: E402
 from process_bigraph import Composite, allocate_core, gather_emitter_results  # noqa: E402
 from viva_copasi.processes import CopasiUTCProcess  # noqa: E402
 
 from viva_pulse.composites import liver_tissue_replay, pulse_hepatic, pulse_liver_tissue  # noqa: E402
 from viva_pulse.core import build_core  # noqa: E402
 from viva_pulse.multiscale import KOSCHORRECK_2008, register_multiscale, save_hepatic_trajectory  # noqa: E402
+from viva_pulse.multiscale.models import KOENIG_PARAMETER_SETS, koenig_2014  # noqa: E402
 from viva_pulse.multiscale.tissue import HEPATIC_PATHS  # noqa: E402
 
 BOUND = ("IR", "I2R", "IRp", "I2Rp", "IRen", "I2Ren", "IRPen", "I2RPen")  # insulin-bound receptor states
@@ -54,6 +55,16 @@ def _synthetic(recorded, tmp_path, *, seconds, step_at, factor):
         values[key] = [series[0] * s for s in scale]
     path = tmp_path / "synthetic.json"
     path.write_text(json.dumps({"time": [float(t) for t in range(seconds + 1)], "values": values}))
+    return path
+
+
+def _constant(recorded, tmp_path, *, seconds, name="constant.json", **values):
+    """Pulse's t=0 hepatic values held for ``seconds``, with ``values`` (path with '/' as '__') replacing some."""
+    base = json.loads(recorded.read_text())
+    overrides = {key.replace("__", "/"): value for key, value in values.items()}
+    series = {key: [overrides.get(key, s[0])] * (seconds + 1) for key, s in base["values"].items()}
+    path = tmp_path / name
+    path.write_text(json.dumps({"time": [float(t) for t in range(seconds + 1)], "values": series}))
     return path
 
 
@@ -210,6 +221,84 @@ def test_amounts_follow_the_paper_geometry(recorded):
     assert total == pytest.approx(cells * 1.0e5 / 6.02214076e23 * 1e9, rel=0.01)
 
 
+# -- metabolism (König, COPASI) -------------------------------------------------------
+
+
+def _metabolism(row):
+    return row["tissue"]["metabolism"]
+
+
+def test_metabolism_cell_equals_direct_copasi(recorded):
+    """Falsifies: the metabolism cell isn't König's model driven by Pulse's liver glucose,
+    lactate and insulin (wrong species, units, timing, or insulin left to König's own
+    rule). Oracle: König loaded directly through basico, insulin switched to fixed,
+    equilibrated at the first drive, then advanced 1 s per drive by hand."""
+    rows = _run(liver_tissue_replay, 15, trajectory_file=str(recorded), metabolism=True)
+    drives = [(row["circuits"]["hepatic"]["liver"]["glucose_mM"], row["circuits"]["hepatic"]["liver"]["lactate_mM"],
+               row["circuits"]["hepatic"]["liver"]["insulin_pmol_per_L"]) for row in rows]
+    dm = load_model(str(koenig_2014()))
+    set_parameters(name="ins", exact=True, status="fixed", model=dm)
+
+    def drive(glc, lac, ins):
+        set_species(name="glc_ext", exact=True, initial_concentration=glc, model=dm)
+        set_species(name="lac_ext", exact=True, initial_concentration=lac, model=dm)
+        set_parameters(name="ins", exact=True, initial_value=ins, model=dm)
+
+    drive(*drives[0])
+    assert run_steadystate(model=dm, update_model=True) in (1, 2)
+    for row, step in zip(rows[1:], drives[:-1]):
+        drive(*step)
+        tc = run_time_course(duration=1.0, intervals=1, model=dm, update_model=True, use_sbml_id=True)
+        cells = _metabolism(row)["cells"]["s0_hepatocyte"]
+        # rel 1e-6 = COPASI's default integration tolerance: the cell and the oracle set initial
+        # values through different calls, which moves the integrator's path at that level.
+        for species in ("glc", "glc6p", "glyglc", "pyr", "lac", "oaa"):
+            assert cells[species] == pytest.approx(float(tc[species].iloc[-1]), rel=1e-6, abs=1e-12), species
+        assert _metabolism(row)["quantities"]["s0_hepatocyte"]["gamma"] == pytest.approx(
+            dm.getModel().getModelValue("gamma").getValue(), rel=1e-6)
+
+
+def test_driven_insulin_alone_moves_gamma(recorded, tmp_path):
+    """Falsifies: König's own insulin rule (a function of glucose) still drives gamma.
+    Glucose is held constant and only Pulse's insulin steps x4 at t = 10, so gamma
+    may change only through the driven insulin: flat before, lower after (probe B:
+    gamma falls as insulin rises)."""
+    synthetic = _synthetic(recorded, tmp_path, seconds=20, step_at=10, factor=4.0)
+    rows = _run(liver_tissue_replay, 20, trajectory_file=str(synthetic), metabolism=True)
+    gamma = [_metabolism(row)["quantities"]["s0_hepatocyte"]["gamma"] for row in rows]
+    assert max(gamma[1:11]) - min(gamma[1:11]) < 1e-9
+    assert gamma[11] < gamma[10] - 0.01
+
+
+def test_parameter_sets_reach_copasi_and_aggregate_by_weight(recorded):
+    """Falsifies: a subpopulation's König parameter set doesn't reach COPASI, or the
+    metabolism summary weights instances wrongly. Pre-registered from probe D: with
+    the provisional corrections cytosolic lactate sits near the external 1.6 mM, as
+    published it stays below 1e-3 mM."""
+    subpopulations = {"published": {"weight": 0.25},
+                      "corrected": {"weight": 0.75, "metabolism_parameters": "provisional_corrections"}}
+    rows = _run(liver_tissue_replay, 3, trajectory_file=str(recorded), metabolism=True, subpopulations=subpopulations)
+    m = _metabolism(rows[-1])
+    assert m["cells"]["s0_corrected"]["lac"] > 1.0 > 1e-3 > m["cells"]["s0_published"]["lac"]
+    for species in ("lac", "glyglc", "glc6p"):
+        expected = 0.25 * m["cells"]["s0_published"][species] + 0.75 * m["cells"]["s0_corrected"][species]
+        assert m["cells_summary"]["mean_mM"][species] == pytest.approx(expected, rel=1e-12)
+    assert m["fluxes_summary"]["mean_flux"]["GLUT2"] == pytest.approx(
+        0.25 * m["fluxes"]["s0_published"]["GLUT2"] + 0.75 * m["fluxes"]["s0_corrected"]["GLUT2"], rel=1e-12)
+
+
+def test_higher_glucose_stores_more_glycogen(recorded, tmp_path):
+    """Pre-registered from probe B: König's steady glycogen rises with external glucose
+    (117 mM at 4 mM glucose, 494 mM at 8 mM, insulin 160 pmol/L)."""
+    glycogen = {}
+    for glucose in (4.0, 8.0):
+        trajectory = _constant(recorded, tmp_path, seconds=3, name=f"glc{glucose}.json",
+                               liver__glucose_mM=glucose, liver__insulin_pmol_per_L=160.0)
+        rows = _run(liver_tissue_replay, 3, trajectory_file=str(trajectory), metabolism=True)
+        glycogen[glucose] = _metabolism(rows[-1])["cells"]["s0_hepatocyte"]["glyglc"]
+    assert glycogen[8.0] > 2 * glycogen[4.0]
+
+
 # -- validation (no engine) ----------------------------------------------------------
 
 
@@ -221,6 +310,7 @@ def test_amounts_follow_the_paper_geometry(recorded):
     ({"subpopulations": {"a": {"weight": 1.0, "rate": 2}}}, "unexpected keys"),
     ({"subpopulations": {}}, "at least one"),
     ({"stratum": 2}, "unexpected"),
+    ({"subpopulations": {"a": {"weight": 1.0, "metabolism_parameters": "refit"}}}, "unknown metabolism_parameters"),
 ])
 def test_generator_validates_when_building(params, match):
     with pytest.raises((ValueError, TypeError), match=match):
@@ -252,6 +342,17 @@ def test_unknown_cell_parameter_fails_at_construction():
     with pytest.raises(ValueError, match="not fixed global quantities"):
         EquilibratedCopasiProcess({"model_source": str(KOSCHORRECK_2008), "parameters": {"kon": 1.0}},
                                   core=allocate_core())
+
+
+def test_driven_parameter_must_exist_and_arrive():
+    from viva_pulse.multiscale.cells import EquilibratedCopasiProcess
+    with pytest.raises(ValueError, match="not global quantities"):
+        EquilibratedCopasiProcess({"model_source": str(koenig_2014()), "driven_parameters": ["insulin"]},
+                                  core=allocate_core())
+    process = EquilibratedCopasiProcess({"model_source": str(koenig_2014()), "driven_parameters": ["ins"]},
+                                        core=allocate_core())
+    with pytest.raises(ValueError, match="parameter_drive"):
+        process.update({"species_counts": {}, "parameter_drive": {}, "species_concentrations": {}}, 1.0)
 
 
 def test_missing_drive_fails_instead_of_running_on_the_file_value():

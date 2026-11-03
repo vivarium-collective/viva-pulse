@@ -57,3 +57,22 @@ def _check(data: bytes, source) -> None:
     digest = hashlib.sha256(data).hexdigest()
     if digest != KOENIG_2014_SHA256:
         raise ValueError(f"König 2014 model from {source} has sha256 {digest}, expected {KOENIG_2014_SHA256}")
+
+
+#: Named parameter sets for König's model, applied per subpopulation.
+#: - ``published``: the file as published.
+#: - ``provisional_corrections``: three equilibrium constants corrected against
+#:   eQuilibrator (docs/plan/cell-content-probes, probes C-D). Provisional, not a
+#:   modeler's decision. ``EN_keq`` was copied from ``TPI_keq`` (eQuilibrator K' at
+#:   pH 7.2, pMg 3, I 0.25 M, 310.18 K); ``LDH_keq`` is the reverse-direction constant
+#:   (inverted); ``ALD_keq`` is declared mM but matches K' in M (x1000). It makes the
+#:   thermodynamics consistent but the liver then makes no glucose at fasting
+#:   levels: the published calibration leans on the original values.
+KOENIG_PARAMETER_SETS = {
+    "published": {},
+    "provisional_corrections": {
+        "EN_keq": 4.346,
+        "LDH_keq": 1 / 0.000278321076004752,
+        "ALD_keq": 9.76298897362969e-5 * 1000,
+    },
+}

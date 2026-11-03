@@ -74,6 +74,7 @@ class HepaticGradient(Step):
         "extraction": {"_type": "float", "_default": 0.0},
         "max_nM": {"_type": "float", "_default": 100.0},
         "species": {"_type": "string", "_default": "ins"},
+        "metabolism": {"_type": "boolean", "_default": False},
     }
 
     def initialize(self, config=None):
@@ -85,7 +86,12 @@ class HepaticGradient(Step):
         return {"hepatic": _nest([(path, "float") for path in HEPATIC_PATHS])}
 
     def outputs(self):
-        return {"drive": {f"s{i}": "overwrite[map[float]]" for i in range(len(self._x))}}
+        ports = {"drive": {f"s{i}": "overwrite[map[float]]" for i in range(len(self._x))}}
+        if self.config.get("metabolism"):
+            ports["metabolism_drive"] = {f"s{i}": {"species": "overwrite[map[float]]",
+                                                  "parameters": "overwrite[map[float]]"}
+                                         for i in range(len(self._x))}
+        return ports
 
     def update(self, state, interval=None):
         mean = state["hepatic"]["liver"]["insulin_pmol_per_L"] / 1000.0
@@ -94,7 +100,15 @@ class HepaticGradient(Step):
             raise ValueError(f"stratum insulin {max(local)} nM is above the cell model's bound "
                              f"{self.config['max_nM']} nM")
         species = self.config["species"]
-        return {"drive": {f"s{i}": {species: c} for i, c in enumerate(local)}}
+        update = {"drive": {f"s{i}": {species: c} for i, c in enumerate(local)}}
+        if self.config.get("metabolism"):
+            liver = state["hepatic"]["liver"]
+            # König's model: external glucose and lactate (mM, uniform along the
+            # sinusoid) and insulin (pmol/L, the stratum's local value).
+            external = {"glc_ext": liver["glucose_mM"], "lac_ext": liver["lactate_mM"]}
+            update["metabolism_drive"] = {f"s{i}": {"species": dict(external), "parameters": {"ins": c * 1000.0}}
+                                          for i, c in enumerate(local)}
+        return update
 
 
 class TissueAggregate(Step):
@@ -112,11 +126,17 @@ class TissueAggregate(Step):
     Defaults are Koschorreck 2008's: a hepatocyte is a 20 um sphere (40 nM =
     1e5 receptors per cell), hepatocytes fill 78% of the liver, liver density
     1051 g/L (the model's ``rholiver``). They describe rat liver.
+
+    ``unit`` is the suffix of the statistics' names (``mean_<unit>``); with
+    ``amounts`` false only the statistics are output (no per-cell or whole-liver
+    amounts, which need the receptor model's nM-per-hepatocyte convention).
     """
 
     config_schema = {
         "instances": "map[float]",
         "exclude": {"_type": "list[string]", "_default": []},
+        "unit": {"_type": "string", "_default": "nM"},
+        "amounts": {"_type": "boolean", "_default": True},
         "cell_diameter_um": {"_type": "float", "_default": 20.0},
         "cell_volume_fraction": {"_type": "float", "_default": 0.78},
         "tissue_density_kg_per_L": {"_type": "float", "_default": 1.051},
@@ -130,12 +150,17 @@ class TissueAggregate(Step):
         self._cell_volume_L = math.pi / 6.0 * (self.config["cell_diameter_um"] * 1e-5) ** 3
 
     def inputs(self):
-        return {"cells": "map[map[float]]", "tissue_mass_kg": "float"}
+        ports = {"cells": "map[map[float]]"}
+        if self.config.get("amounts", True):
+            ports["tissue_mass_kg"] = "float"
+        return ports
 
     def outputs(self):
-        stat = "overwrite[map[float]]"
-        return {"mean_nM": stat, "sd_nM": stat, "min_nM": stat, "max_nM": stat,
-                "molecules_per_cell": stat, "tissue_total_nmol": stat, "cell_count": "overwrite[float]"}
+        stat, unit = "overwrite[map[float]]", self.config.get("unit") or "nM"
+        ports = {f"{name}_{unit}": stat for name in ("mean", "sd", "min", "max")}
+        if self.config.get("amounts", True):
+            ports.update({"molecules_per_cell": stat, "tissue_total_nmol": stat, "cell_count": "overwrite[float]"})
+        return ports
 
     def update(self, state, interval=None):
         cells = state["cells"]
@@ -143,20 +168,24 @@ class TissueAggregate(Step):
             raise ValueError(f"cell stores {sorted(cells)} != configured instances {sorted(self._weights)}")
         exclude = set(self.config.get("exclude") or [])
         species = sorted(set().union(*(cells[i].keys() for i in cells)) - exclude)
-        tissue_volume_L = state["tissue_mass_kg"] / self.config["tissue_density_kg_per_L"]
-        cell_count = self.config["cell_volume_fraction"] * tissue_volume_L / self._cell_volume_L
-        out = {k: {} for k in ("mean_nM", "sd_nM", "min_nM", "max_nM", "molecules_per_cell", "tissue_total_nmol")}
+        unit = self.config.get("unit") or "nM"
+        amounts = self.config.get("amounts", True)
+        out = {f"{name}_{unit}": {} for name in ("mean", "sd", "min", "max")}
+        if amounts:
+            tissue_volume_L = state["tissue_mass_kg"] / self.config["tissue_density_kg_per_L"]
+            cell_count = self.config["cell_volume_fraction"] * tissue_volume_L / self._cell_volume_L
+            out.update({"molecules_per_cell": {}, "tissue_total_nmol": {}})
         for s in species:
             values = [(w, cells[i][s]) for i, w in self._weights.items()]
             mean = sum(w * y for w, y in values)
-            out["mean_nM"][s] = mean
-            out["sd_nM"][s] = math.sqrt(max(sum(w * (y - mean) ** 2 for w, y in values), 0.0))
-            out["min_nM"][s] = min(y for _, y in values)
-            out["max_nM"][s] = max(y for _, y in values)
-            per_cell = mean * 1e-9 * self._cell_volume_L * AVOGADRO
-            out["molecules_per_cell"][s] = per_cell
-            out["tissue_total_nmol"][s] = cell_count * mean * self._cell_volume_L  # nM x L = nmol
-        return {**out, "cell_count": cell_count}
+            out[f"mean_{unit}"][s] = mean
+            out[f"sd_{unit}"][s] = math.sqrt(max(sum(w * (y - mean) ** 2 for w, y in values), 0.0))
+            out[f"min_{unit}"][s] = min(y for _, y in values)
+            out[f"max_{unit}"][s] = max(y for _, y in values)
+            if amounts:  # concentrations in nM per hepatocyte volume
+                out["molecules_per_cell"][s] = mean * 1e-9 * self._cell_volume_L * AVOGADRO
+                out["tissue_total_nmol"][s] = cell_count * mean * self._cell_volume_L  # nM x L = nmol
+        return {**out, "cell_count": cell_count} if amounts else out
 
 
 def hepatic_trajectory(rows: list[dict]) -> dict:

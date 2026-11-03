@@ -21,6 +21,7 @@ from process_bigraph.composite_generator import composite_generator
 
 from ..core import register_processes
 from ..multiscale import KOSCHORRECK_2008, register_multiscale
+from ..multiscale.models import KOENIG_PARAMETER_SETS, koenig_2014
 from ..multiscale.tissue import check_extraction, strata_positions
 from .circuits import _INTERVAL, _STATE_FILE, _reject_unknown, circuit_node
 
@@ -39,9 +40,13 @@ _BLOCK_PARAMETERS = {
                        "description": "Fail if any stratum's insulin exceeds this; 100 nM is the highest level "
                                       "Koschorreck 2008 validates against (provisional)"},
     "subpopulations": {"type": "map", "default": DEFAULT_SUBPOPULATIONS,
-                       "description": "Cell subpopulations in every stratum: name -> {weight, parameters}. "
-                                      "Weights sum to 1; parameters override fixed quantities of the "
-                                      "Koschorreck 2008 model (provisional)"},
+                       "description": "Cell subpopulations in every stratum: name -> {weight, parameters, "
+                                      "metabolism_parameters}. Weights sum to 1; parameters override fixed "
+                                      "quantities of the Koschorreck 2008 model; metabolism_parameters names a "
+                                      "König parameter set (published, provisional_corrections)"},
+    "metabolism": {"type": "boolean", "default": False,
+                   "description": "Add König's hepatic glucose metabolism (COPASI) to every cell, driven by "
+                                  "Pulse's liver glucose, lactate and the stratum's insulin"},
     "equilibrate": {"type": "boolean", "default": True,
                     "description": "Start each instance at COPASI's steady state for its first drive"},
     "interval": _INTERVAL,
@@ -49,23 +54,27 @@ _BLOCK_PARAMETERS = {
 
 
 def _instances(strata, subpopulations):
-    """Instance store name -> (stratum, weight, parameters); validated when the document is built."""
+    """Instance store name -> (stratum, weight, parameters, König set name); validated when the document is built."""
     strata_positions(strata)
     if not subpopulations:
         raise ValueError("subpopulations must name at least one subpopulation")
     weights = {}
     for name, spec in subpopulations.items():
-        unknown = set(spec) - {"weight", "parameters"}
+        unknown = set(spec) - {"weight", "parameters", "metabolism_parameters"}
         if unknown:
             raise ValueError(f"subpopulation {name!r}: unexpected keys {sorted(unknown)}")
+        if spec.get("metabolism_parameters", "published") not in KOENIG_PARAMETER_SETS:
+            raise ValueError(f"subpopulation {name!r}: unknown metabolism_parameters "
+                             f"{spec['metabolism_parameters']!r}; choose from {sorted(KOENIG_PARAMETER_SETS)}")
         weights[name] = float(spec.get("weight", 0.0))
     if min(weights.values()) <= 0 or not math.isclose(sum(weights.values()), 1.0, abs_tol=1e-9):
         raise ValueError(f"subpopulation weights must be positive and sum to 1, got {weights}")
-    return {f"s{i}_{name}": (i, weights[name] / strata, dict(subpopulations[name].get("parameters") or {}))
+    return {f"s{i}_{name}": (i, weights[name] / strata, dict(subpopulations[name].get("parameters") or {}),
+                             subpopulations[name].get("metabolism_parameters", "published"))
             for i in range(strata) for name in subpopulations}
 
 
-def _block(source, *, strata, extraction, max_insulin_nM, subpopulations, equilibrate, interval):
+def _block(source, *, strata, extraction, max_insulin_nM, subpopulations, metabolism, equilibrate, interval):
     instances = _instances(strata, subpopulations)
     check_extraction(extraction)
     cells = {
@@ -79,22 +88,26 @@ def _block(source, *, strata, extraction, max_insulin_nM, subpopulations, equili
                        "species_concentrations": ["tissue", "cells", name]},
             "outputs": {"species_concentrations": ["tissue", "cells", name]},
         }
-        for name, (stratum, _, parameters) in instances.items()
+        for name, (stratum, _, parameters, _set) in instances.items()
     }
+    if metabolism:
+        cells.update(_metabolism(instances, equilibrate, interval))
     return {
         **source,
         "gradient": {
             "_type": "step",
             "address": "local:HepaticGradient",
-            "config": {"strata": strata, "extraction": extraction, "max_nM": max_insulin_nM},
+            "config": {"strata": strata, "extraction": extraction, "max_nM": max_insulin_nM,
+                       "metabolism": metabolism},
             "inputs": {"hepatic": ["circuits", "hepatic"]},
-            "outputs": {"drive": ["tissue", "drive"]},
+            "outputs": {"drive": ["tissue", "drive"],
+                        **({"metabolism_drive": ["tissue", "metabolism", "drive"]} if metabolism else {})},
         },
         **cells,
         "aggregate": {
             "_type": "step",
             "address": "local:TissueAggregate",
-            "config": {"instances": {name: weight for name, (_, weight, _) in instances.items()},
+            "config": {"instances": {name: weight for name, (_, weight, _, _) in instances.items()},
                        "exclude": ["ins"]},
             "inputs": {"cells": ["tissue", "cells"],
                        "tissue_mass_kg": ["circuits", "hepatic", "liver", "tissue_mass_kg"]},
@@ -112,6 +125,39 @@ def _block(source, *, strata, extraction, max_insulin_nM, subpopulations, equili
     }
 
 
+def _metabolism(instances, equilibrate, interval):
+    """König metabolism cells (one per stratum and subpopulation) and their aggregates."""
+    weights = {name: weight for name, (_, weight, _, _) in instances.items()}
+    nodes = {
+        f"metab_{name}": {
+            "_type": "process",
+            "address": "local:EquilibratedCopasiProcess",
+            "interval": interval,
+            "config": {"model_source": str(koenig_2014()), "intervals": 1, "report_fluxes": False,
+                       "parameters": dict(KOENIG_PARAMETER_SETS[set_name]), "driven": ["glc_ext", "lac_ext"],
+                       "driven_parameters": ["ins"], "equilibrate": equilibrate, "emit_fluxes": True,
+                       "emit_quantities": ["gamma"]},
+            "inputs": {"species_counts": ["tissue", "metabolism", "drive", f"s{stratum}", "species"],
+                       "parameter_drive": ["tissue", "metabolism", "drive", f"s{stratum}", "parameters"],
+                       "species_concentrations": ["tissue", "metabolism", "cells", name]},
+            "outputs": {"species_concentrations": ["tissue", "metabolism", "cells", name],
+                        "fluxes": ["tissue", "metabolism", "fluxes", name],
+                        "quantities": ["tissue", "metabolism", "quantities", name]},
+        }
+        for name, (stratum, _, _, set_name) in instances.items()
+    }
+    for store, unit in (("cells", "mM"), ("fluxes", "flux"), ("quantities", "value")):
+        nodes[f"aggregate_metabolism_{store}"] = {
+            "_type": "step",
+            "address": "local:TissueAggregate",
+            "config": {"instances": weights, "unit": unit, "amounts": False},
+            "inputs": {"cells": ["tissue", "metabolism", store]},
+            "outputs": {f"{stat}_{unit}": ["tissue", "metabolism", f"{store}_summary", f"{stat}_{unit}"]
+                        for stat in ("mean", "sd", "min", "max")},
+        }
+    return nodes
+
+
 @composite_generator(
     name="pulse_liver_tissue",
     description="Real whole-body Pulse over a stratified liver tissue block: Pulse's liver insulin, spread "
@@ -124,12 +170,13 @@ def _block(source, *, strata, extraction, max_insulin_nM, subpopulations, equili
     fidelity="real-bridge",
 )
 def pulse_liver_tissue(core=None, *, state_file="StandardMale@0s.json", strata=1, extraction=0.0,
-                       max_insulin_nM=100.0, subpopulations=None, equilibrate=True, interval=1.0, **overrides):
+                       max_insulin_nM=100.0, subpopulations=None, metabolism=False, equilibrate=True, interval=1.0,
+                       **overrides):
     _reject_unknown(overrides)
     return _block({"pulse": circuit_node(["hepatic"], state_file=state_file, interval=interval)},
                   strata=strata, extraction=extraction, max_insulin_nM=max_insulin_nM,
                   subpopulations=DEFAULT_SUBPOPULATIONS if subpopulations is None else subpopulations,
-                  equilibrate=equilibrate, interval=interval)
+                  metabolism=metabolism, equilibrate=equilibrate, interval=interval)
 
 
 @composite_generator(
@@ -144,7 +191,7 @@ def pulse_liver_tissue(core=None, *, state_file="StandardMale@0s.json", strata=1
     fidelity="real-bridge",
 )
 def liver_tissue_replay(core=None, *, trajectory_file="", strata=1, extraction=0.0, max_insulin_nM=100.0,
-                        subpopulations=None, equilibrate=True, interval=1.0, **overrides):
+                        subpopulations=None, metabolism=False, equilibrate=True, interval=1.0, **overrides):
     _reject_unknown(overrides)
     if not trajectory_file:
         raise ValueError("trajectory_file is required")
@@ -153,4 +200,4 @@ def liver_tissue_replay(core=None, *, trajectory_file="", strata=1, extraction=0
               "outputs": {"hepatic": ["circuits", "hepatic"]}}
     return _block({"replay": replay}, strata=strata, extraction=extraction, max_insulin_nM=max_insulin_nM,
                   subpopulations=DEFAULT_SUBPOPULATIONS if subpopulations is None else subpopulations,
-                  equilibrate=equilibrate, interval=interval)
+                  metabolism=metabolism, equilibrate=equilibrate, interval=interval)
