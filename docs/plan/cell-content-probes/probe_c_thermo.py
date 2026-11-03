@@ -5,6 +5,7 @@ at Pulse's core temperature; eQuilibrator uses its bundled data only (the "auto"
 tier would switch to a full database when one is on the machine). Concentrations
 are probe B's steady state at Pulse's liver values.
 """
+import os
 import re
 import time
 import xml.etree.ElementTree as ET
@@ -37,6 +38,9 @@ print("mitochondrial water/proton as annotated:", {k: ANNOTATED[k] for k in ("h2
 
 # steady state at Pulse's liver values (probe B): concentrations in mM
 dm = load_model(str(path))
+if os.environ.get("KOENIG_CORRECTED"):  # probe D's provisional corrections
+    for name, value in {"EN_keq": 4.346, "LDH_keq": 1 / 0.000278321076004752, "ALD_keq": 9.76298897362969e-5 * 1000}.items():
+        set_parameters(name=name, exact=True, initial_value=value, model=dm)
 set_species(name="glc_ext", exact=True, initial_concentration=6.05, model=dm)
 set_species(name="lac_ext", exact=True, initial_concentration=1.64, model=dm)
 set_parameters(name="ins", exact=True, status="fixed", model=dm)

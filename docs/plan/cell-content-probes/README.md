@@ -39,3 +39,15 @@ König's model is fetched at a pinned commit by `viva_pulse.multiscale.models.ko
     - EN (0.013; `EN_keq` equals `TPI_keq` to every digit).
   - **ALD** matches numerically in M (0.81), but the model works in mM and ALD's constant carries a concentration unit, so the model's effective equilibrium sits 1000× away.
 - **Hypotheses for a modeler, not facts:** a copy slip (EN), a reversed constant (LDH, consistent with cytosolic lactate at 2.4e-6 mM), and unit slips (ALD, PEPCK). This is the thermodynamic layer earning its place: it finds where the kinetic model breaks the second law under Pulse's conditions.
+
+## D. Provisional corrections (`probe_d_corrections.py`; mine, not a modeler's)
+- **The rate laws are v ∝ [S] − [P]/Keq in the reaction's written direction.** That supports three corrections:
+  - `EN_keq` (copied from `TPI_keq`) becomes eQuilibrator's K′ at the cell conditions, 4.346.
+  - `LDH_keq` is the reverse-direction constant, so it is inverted (3593).
+  - `ALD_keq` is declared mM but matches K′ in M, so it is scaled ×1000 (0.0976 mM).
+- **Left as published:** `PEPCK_keq`, still 55× off after the unit fix (the CO2 convention may account for it), and `PGK_keq` (260× off, no clean explanation).
+- **With the corrections:**
+  - a steady state still exists;
+  - cytosolic lactate is 1.49 mM (was 2e-6);
+  - the robust conflicts are gone, and three marginal near-equilibrium flags remain (GPI, GAPDH, NDKGTPM; `KOENIG_CORRECTED=1 probe_c_thermo.py`).
+- **The cost:** the liver no longer makes glucose. At 6.05 mM glucose GLUT2 runs inward (uptake) instead of releasing glucose; at 4 mM, GAPDH runs glycolytic instead of gluconeogenic. The published model's glucose production appears to depend on the inconsistent constants, so its other parameters were likely fitted around them. Consistent thermodynamics would need a refit, which is a modeler's job.
