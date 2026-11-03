@@ -19,7 +19,8 @@ from viva_pulse.circuits import MODULES, CircuitModule, Request
 from viva_pulse.circuits.respiratory import MECHANICAL_VENTILATOR, VENTILATOR_BASELINE
 from viva_pulse.circuits.supplemental_oxygen import OXYGEN_BASELINE, SUPPLEMENTAL_OXYGEN
 from viva_pulse.composites import (pulse_cardiovascular, pulse_mechanical_ventilation, pulse_respiratory,
-                                   pulse_supplemental_oxygen, pulse_thermal, pulse_whole_body_circuits)
+                                   pulse_substances, pulse_supplemental_oxygen, pulse_thermal,
+                                   pulse_whole_body_circuits)
 from viva_pulse.composites.circuits import WHOLE_BODY_MODULES
 from viva_pulse.core import build_core
 from viva_pulse.processes import PulseCircuitProcess
@@ -153,6 +154,7 @@ def test_combined_readings_equal_the_single_module_composites(baseline):
                                       connected=0.0, intubated=0.0),
         "thermal": _run(pulse_thermal, 120),
         "supplemental_oxygen": _run(pulse_supplemental_oxygen, 120, oxygen_connected=0.0),
+        "substances": _run(pulse_substances, 120),
     }
     assert set(singles) == {m.name for m in WHOLE_BODY_MODULES}
     for name, rows in singles.items():

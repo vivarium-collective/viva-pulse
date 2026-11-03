@@ -14,6 +14,7 @@ from ..circuits.cardiovascular import CARDIOVASCULAR, HEMORRHAGE_COMPARTMENTS, M
 from ..circuits.respiratory import (
     INTUBATION_TYPES, MECHANICAL_VENTILATOR, MULTIPLIERS as RESPIRATORY_MULTIPLIERS, RESPIRATORY,
     VENTILATOR_BASELINE, VENTILATOR_MODES)
+from ..circuits.substances import SUBSTANCES
 from ..circuits.supplemental_oxygen import OXYGEN_BASELINE, OXYGEN_DEVICES, SUPPLEMENTAL_OXYGEN
 from ..circuits.thermal import ENVIRONMENT_BASELINE, THERMAL, THERMAL_APPLICATION_BASELINE
 from ..core import register_processes
@@ -366,7 +367,33 @@ def pulse_supplemental_oxygen(core=None, *, model_type="whole_body", state_file=
     }
 
 
-WHOLE_BODY_MODULES = (CARDIOVASCULAR, RESPIRATORY, MECHANICAL_VENTILATOR, THERMAL, SUPPLEMENTAL_OXYGEN)
+@composite_generator(
+    name="pulse_substances",
+    description="Blood insulin and glucose concentrations in the real whole-body engine, read from "
+                "Pulse's substance data requests. Read-only: no setpoints.",
+    parameters={
+        "model_type": {"type": "string", "default": "whole_body", "choices": ["whole_body"],
+                       "description": "Pulse engine running the circuits"},
+        "state_file": _STATE_FILE,
+        "interval": _INTERVAL,
+    },
+    core_extensions=[register_processes],
+    default_n_steps=300,
+    fidelity="real-bridge",
+)
+def pulse_substances(core=None, *, model_type="whole_body", state_file="StandardMale@0s.json",
+                     interval=1.0, **overrides):
+    _reject_unknown(overrides)
+    return {
+        "pulse": circuit_node(["substances"], model_type=model_type, state_file=state_file,
+                              interval=interval),
+        "interventions": {},
+        "circuits": {},
+        "emitter": circuit_emitter(),
+    }
+
+
+WHOLE_BODY_MODULES = (CARDIOVASCULAR, RESPIRATORY, MECHANICAL_VENTILATOR, THERMAL, SUPPLEMENTAL_OXYGEN, SUBSTANCES)
 
 
 @composite_generator(

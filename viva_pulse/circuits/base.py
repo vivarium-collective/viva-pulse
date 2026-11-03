@@ -25,7 +25,8 @@ class Request:
     """One Pulse data request, emitted at ``path`` inside its module's port tree.
 
     ``category`` is ``"physiology"``, ``"environment"``, ``"liquid_compartment"``,
-    ``"gas_compartment"``, ``"thermal_compartment"`` or ``"mechanical_ventilator"``.
+    ``"gas_compartment"``, ``"thermal_compartment"``, ``"mechanical_ventilator"`` or
+    ``"substance"`` (whole-body values of the Pulse substance named by ``substance``).
     ``unit`` is ``(unit class in pulse.cdm.scalars, unit attribute)``, or None for
     unitless. Compartment property names are Pulse's own spelling: ``Pressure``,
     ``Volume``, ``Inflow``, ``Outflow`` (``SEDataRequestTracker.cpp``), and
@@ -43,10 +44,11 @@ class Request:
     unit: tuple[str, str] | None
     compartment: str | None = None
     minus: str | None = None
+    substance: str | None = None
 
     def key(self) -> tuple:
         """Identity of the underlying Pulse request; equal keys share one request."""
-        return (self.category, self.compartment, self.property, self.unit, self.minus)
+        return (self.category, self.compartment, self.substance, self.property, self.unit, self.minus)
 
     def to_pulse(self) -> list:
         """The Pulse data requests this output reads: one, or two with ``minus``."""
@@ -72,6 +74,8 @@ class Request:
                 self.compartment, property, unit=unit)
         if self.category == "mechanical_ventilator":
             return SEDataRequest.create_mechanical_ventilator_request(property, unit=unit)
+        if self.category == "substance":
+            return SEDataRequest.create_substance_request(self.substance, property, unit=unit)
         raise ValueError(f"unsupported data request category {self.category!r}")
 
 
