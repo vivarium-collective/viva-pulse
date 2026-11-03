@@ -16,7 +16,14 @@ from viva_pulse.runtime import ensure_pulse_importable
 ORACLE = {
     ("liver", "insulin_pmol_per_L"): ("cmpt_sub", "LiverVasculature", "Insulin", "Molarity",
                                       "AmountPerVolumeUnit", "pmol_Per_L"),
+    ("liver", "glucose_mM"): ("cmpt_sub", "LiverVasculature", "Glucose", "Molarity",
+                              "AmountPerVolumeUnit", "mmol_Per_L"),
+    ("liver", "lactate_mM"): ("cmpt_sub", "LiverVasculature", "Lactate", "Molarity",
+                              "AmountPerVolumeUnit", "mmol_Per_L"),
     ("liver", "tissue_mass_kg"): ("tissue", "LiverTissue", None, "TotalMass", "MassUnit", "kg"),
+    ("body", "core_temperature_C"): ("physiology", None, None, "CoreTemperature", "TemperatureUnit", "C"),
+    ("check", "glucose_mg_per_dL"): ("cmpt_sub", "LiverVasculature", "Glucose", "Concentration",
+                                     "MassPerVolumeUnit", "mg_Per_dL"),
     # Not a module output: the same insulin as a mass concentration, to check the unit.
     ("check", "insulin_ug_per_L"): ("cmpt_sub", "LiverVasculature", "Insulin", "Concentration",
                                     "MassPerVolumeUnit", "ug_Per_L"),
@@ -36,6 +43,8 @@ def _direct_engine(paths):
         if kind == "cmpt_sub":
             requests.append(SEDataRequest.create_liquid_compartment_substance_request(
                 compartment, substance, prop, unit=unit))
+        elif kind == "physiology":
+            requests.append(SEDataRequest.create_physiology_request(prop, unit=unit))
         else:
             requests.append(SEDataRequest.create_tissue_request(compartment, prop, unit=unit))
     engine = PulseEngine(eModelType.HumanAdultWholeBody, f"{bin_dir}/")
@@ -64,7 +73,12 @@ def test_first_row_equals_a_direct_engine(run_composite):
         assert math.isfinite(expected), path
         if path[0] != "check":
             assert _at(hepatic, path) == pytest.approx(expected, rel=1e-9), path
-    molar_mass = json.loads((ensure_pulse_importable() / "substances" / "Insulin.json").read_text())
-    g_per_mol = molar_mass["MolarMass"]["ScalarMassPerAmount"]["Value"]
-    pmol_per_L = oracle[("check", "insulin_ug_per_L")] * 1e-6 / g_per_mol * 1e12
+    substances = ensure_pulse_importable() / "substances"
+
+    def g_per_mol(name):
+        return json.loads((substances / f"{name}.json").read_text(encoding="utf-8"))["MolarMass"]["ScalarMassPerAmount"]["Value"]
+
+    pmol_per_L = oracle[("check", "insulin_ug_per_L")] * 1e-6 / g_per_mol("Insulin") * 1e12
     assert hepatic["liver"]["insulin_pmol_per_L"] == pytest.approx(pmol_per_L, rel=1e-9)
+    mM = oracle[("check", "glucose_mg_per_dL")] * 10.0 / g_per_mol("Glucose")  # mg/dL -> mg/L -> mmol/L
+    assert hepatic["liver"]["glucose_mM"] == pytest.approx(mM, rel=1e-9)
