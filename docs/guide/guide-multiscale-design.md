@@ -57,6 +57,8 @@ viva-pde-particle (Jim Schaff's) couples an insulin field to receptor particles.
 
 The probe answered the main question first ([spatial-probes](../plan/spatial-probes/README.md)). On a hepatocyte-sized membrane patch at Pulse's insulin level, binding is limited by the reaction, not by insulin delivery: delivery is about 11 times faster than receptors take insulin up. The spatial model reproduces the well-mixed receptor model, with at most a ~10% early lag. Moving receptor binding into it would cost much and change little, so the spatial simulator needs a question where delivery is the bottleneck.
 
+Where delivery is the bottleneck: along the sinusoid, from portal inlet to central outlet, where blood flows past cells that take insulin and oxygen up. That is what the strata's `extraction` stands in for by hand. Flow needs an advection tool (spatial-transport), not viva-pde-particle. Scoped in [plan-spatial-delivery](../plan/plan-spatial-delivery.md); not built.
+
 ## Provisional biology (a modeler should confirm)
 
 - **The receptor model doesn't feed metabolism.** Metabolism responds to the insulin level through its own fitted curve.
