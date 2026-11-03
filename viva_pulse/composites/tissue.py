@@ -199,10 +199,10 @@ def _thermo(instances, conditions):
 
 @composite_generator(
     name="pulse_liver_tissue",
-    description="Real whole-body Pulse over a stratified liver tissue block: Pulse's liver insulin, spread "
-                "inlet-to-outlet over equal-volume strata by a configured extraction, drives Koschorreck 2008 "
-                "hepatocyte insulin-receptor models in COPASI, one per stratum and subpopulation. One-way: the "
-                "cells never change Pulse.",
+    description="Real whole-body Pulse over a stratified liver tissue block whose cells run Koschorreck 2008 "
+                "insulin receptors and, optionally, König 2012 glucose metabolism (both COPASI) with its eQuilibrator "
+                "thermodynamics; Pulse's liver insulin is spread inlet-to-outlet over the strata by a configured "
+                "extraction, and the cells never change Pulse.",
     parameters={"state_file": _STATE_FILE, **_BLOCK_PARAMETERS},
     core_extensions=[register_processes, register_multiscale],
     default_n_steps=600,
