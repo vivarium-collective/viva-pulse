@@ -88,3 +88,16 @@ Code: `viva_pulse/circuits/hepatic.py`, `viva_pulse/multiscale/`, `viva_pulse/co
   - Pulse is unchanged with the cells attached.
   - Replay equals live.
   - COPASI costs 0.38 ms per instance-second.
+
+## Task: a marimo notebook of the design (added 2026-11-03; not started)
+
+Build a marimo notebook that presents the whole design and content of [the guide](../guide/guide-multiscale-design.md). It should be:
+- fully self-explaining, comprehensive and informative;
+- interactive, creative and colorful;
+- useful to biological modelers and computationalists alike.
+
+It lives on `feat/multiscale`, under the same local-only rule as the rest of this work.
+
+**Kept in sync, always:** the notebook follows the latest design iteration at any given time. Any change to the guide (a dial setting, a gate, what is built, a probe result) updates the notebook in the same commit.
+
+**Next step:** at the start of the next session, devise its plan in plan mode, alongside probe S3, then implement it.
