@@ -7,6 +7,7 @@ workspace's own processes resolve regardless of how the package was installed
 
 from process_bigraph import allocate_core
 
+from .multiscale.thermo import MetabolismThermo
 from .multiscale.tissue import HepaticGradient, HepaticReplay, TissueAggregate
 from .processes import MapFluidController, PulseCircuitProcess, PulseProcess
 
@@ -18,6 +19,7 @@ def register_processes(core):
     core.register_link("HepaticGradient", HepaticGradient)
     core.register_link("TissueAggregate", TissueAggregate)
     core.register_link("HepaticReplay", HepaticReplay)
+    core.register_link("MetabolismThermo", MetabolismThermo)
     return core
 
 

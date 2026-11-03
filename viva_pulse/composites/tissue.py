@@ -44,6 +44,14 @@ _BLOCK_PARAMETERS = {
                                       "metabolism_parameters}. Weights sum to 1; parameters override fixed "
                                       "quantities of the Koschorreck 2008 model; metabolism_parameters names a "
                                       "König parameter set (published, provisional_corrections)"},
+    "thermo": {"type": "boolean", "default": False,
+               "description": "Add eQuilibrator thermodynamics of the metabolism cells' reactions (needs metabolism)"},
+    "thermo_pH": {"type": "float", "default": 7.2, "description": "Cell pH for thermodynamics (provisional; Pulse "
+                                                                  "reports pH only in blood)"},
+    "thermo_pMg": {"type": "float", "default": 3.0, "description": "Cell pMg for thermodynamics (provisional; Pulse "
+                                                                   "has no magnesium)"},
+    "thermo_ionic_strength_M": {"type": "float", "default": 0.25,
+                                "description": "Cell ionic strength for thermodynamics, M (provisional)"},
     "metabolism": {"type": "boolean", "default": False,
                    "description": "Add König's hepatic glucose metabolism (COPASI) to every cell, driven by "
                                   "Pulse's liver glucose, lactate and the stratum's insulin"},
@@ -74,9 +82,12 @@ def _instances(strata, subpopulations):
             for i in range(strata) for name in subpopulations}
 
 
-def _block(source, *, strata, extraction, max_insulin_nM, subpopulations, metabolism, equilibrate, interval):
+def _block(source, *, strata, extraction, max_insulin_nM, subpopulations, metabolism, thermo, thermo_conditions,
+           equilibrate, interval):
     instances = _instances(strata, subpopulations)
     check_extraction(extraction)
+    if thermo and not metabolism:
+        raise ValueError("thermo needs metabolism: it scores the metabolism cells' reactions")
     cells = {
         f"cell_{name}": {
             "_type": "process",
@@ -92,6 +103,8 @@ def _block(source, *, strata, extraction, max_insulin_nM, subpopulations, metabo
     }
     if metabolism:
         cells.update(_metabolism(instances, equilibrate, interval))
+    if thermo:
+        cells.update(_thermo(instances, thermo_conditions))
     return {
         **source,
         "gradient": {
@@ -158,6 +171,32 @@ def _metabolism(instances, equilibrate, interval):
     return nodes
 
 
+def _thermo(instances, conditions):
+    """eQuilibrator dG' over every metabolism cell, and its summaries across the liver."""
+    weights = {name: weight for name, (_, weight, _, _) in instances.items()}
+    nodes = {"thermo_readout": {
+        "_type": "step",
+        "address": "local:MetabolismThermo",
+        "config": {"model_source": str(koenig_2014()), "instances": list(weights), **conditions},
+        "inputs": {"cells": ["tissue", "metabolism", "cells"], "fluxes": ["tissue", "metabolism", "fluxes"],
+                   "temperature_C": ["circuits", "hepatic", "body", "core_temperature_C"]},
+        "outputs": {"dg_kJ_per_mol": ["tissue", "thermo", "dg_kJ_per_mol"],
+                    "conflicts": ["tissue", "thermo", "conflicts"],
+                    "standard_kJ_per_mol": ["tissue", "thermo", "standard_kJ_per_mol"],
+                    "conditions": ["tissue", "thermo", "conditions"]},
+    }}
+    for store, unit in (("dg_kJ_per_mol", "kJ_per_mol"), ("conflicts", "fraction")):
+        nodes[f"aggregate_thermo_{store}"] = {
+            "_type": "step",
+            "address": "local:TissueAggregate",
+            "config": {"instances": weights, "unit": unit, "amounts": False},
+            "inputs": {"cells": ["tissue", "thermo", store]},
+            "outputs": {f"{stat}_{unit}": ["tissue", "thermo", f"{store}_summary", f"{stat}_{unit}"]
+                        for stat in ("mean", "sd", "min", "max")},
+        }
+    return nodes
+
+
 @composite_generator(
     name="pulse_liver_tissue",
     description="Real whole-body Pulse over a stratified liver tissue block: Pulse's liver insulin, spread "
@@ -170,13 +209,15 @@ def _metabolism(instances, equilibrate, interval):
     fidelity="real-bridge",
 )
 def pulse_liver_tissue(core=None, *, state_file="StandardMale@0s.json", strata=1, extraction=0.0,
-                       max_insulin_nM=100.0, subpopulations=None, metabolism=False, equilibrate=True, interval=1.0,
-                       **overrides):
+                       max_insulin_nM=100.0, subpopulations=None, metabolism=False, thermo=False, thermo_pH=7.2,
+                       thermo_pMg=3.0, thermo_ionic_strength_M=0.25, equilibrate=True, interval=1.0, **overrides):
     _reject_unknown(overrides)
     return _block({"pulse": circuit_node(["hepatic"], state_file=state_file, interval=interval)},
                   strata=strata, extraction=extraction, max_insulin_nM=max_insulin_nM,
                   subpopulations=DEFAULT_SUBPOPULATIONS if subpopulations is None else subpopulations,
-                  metabolism=metabolism, equilibrate=equilibrate, interval=interval)
+                  metabolism=metabolism, thermo=thermo,
+                  thermo_conditions={"p_h": thermo_pH, "p_mg": thermo_pMg, "ionic_strength_M": thermo_ionic_strength_M},
+                  equilibrate=equilibrate, interval=interval)
 
 
 @composite_generator(
@@ -191,7 +232,8 @@ def pulse_liver_tissue(core=None, *, state_file="StandardMale@0s.json", strata=1
     fidelity="real-bridge",
 )
 def liver_tissue_replay(core=None, *, trajectory_file="", strata=1, extraction=0.0, max_insulin_nM=100.0,
-                        subpopulations=None, metabolism=False, equilibrate=True, interval=1.0, **overrides):
+                        subpopulations=None, metabolism=False, thermo=False, thermo_pH=7.2, thermo_pMg=3.0,
+                        thermo_ionic_strength_M=0.25, equilibrate=True, interval=1.0, **overrides):
     _reject_unknown(overrides)
     if not trajectory_file:
         raise ValueError("trajectory_file is required")
@@ -200,4 +242,6 @@ def liver_tissue_replay(core=None, *, trajectory_file="", strata=1, extraction=0
               "outputs": {"hepatic": ["circuits", "hepatic"]}}
     return _block({"replay": replay}, strata=strata, extraction=extraction, max_insulin_nM=max_insulin_nM,
                   subpopulations=DEFAULT_SUBPOPULATIONS if subpopulations is None else subpopulations,
-                  metabolism=metabolism, equilibrate=equilibrate, interval=interval)
+                  metabolism=metabolism, thermo=thermo,
+                  thermo_conditions={"p_h": thermo_pH, "p_mg": thermo_pMg, "ionic_strength_M": thermo_ionic_strength_M},
+                  equilibrate=equilibrate, interval=interval)

@@ -299,6 +299,76 @@ def test_higher_glucose_stores_more_glycogen(recorded, tmp_path):
     assert glycogen[8.0] > 2 * glycogen[4.0]
 
 
+# -- thermodynamics (eQuilibrator) ----------------------------------------------------
+
+THERMO = {"metabolism": True, "thermo": True}
+
+
+def _equilibrator(conditions):
+    from equilibrator_api import ComponentContribution, Q_
+    from equilibrator_cache.api import create_compound_cache_from_zenodo
+    cc = ComponentContribution(ccache=create_compound_cache_from_zenodo(tier="bundled"))
+    cc.p_h, cc.p_mg = Q_(conditions["p_h"]), Q_(conditions["p_mg"])
+    cc.ionic_strength = Q_(f"{conditions['ionic_strength_M']} M")
+    cc.temperature = Q_(f"{conditions['temperature_K']} K")
+    return cc, Q_
+
+
+def test_thermo_equals_equilibrator_with_hand_written_formulas(recorded):
+    """Falsifies: wrong formulas (parse, KEGG corrections, water patches), wrong units
+    (mM -> M) or wrong arithmetic. Oracle: eQuilibrator's own dg_prime with
+    set_abundance, on formulas written here by hand, at the conditions the step reports."""
+    rows = _run(liver_tissue_replay, 3, trajectory_file=str(recorded), **THERMO)
+    thermo, cells = rows[-1]["tissue"]["thermo"], _metabolism(rows[-1])["cells"]["s0_hepatocyte"]
+    cc, Q_ = _equilibrator(thermo["conditions"])
+    # rid -> {kegg id: species id}, water/H+ written but not given an abundance
+    by_hand = {
+        "GK": ("kegg:C00031 + kegg:C00002 = kegg:C00092 + kegg:C00008",
+               {"C00031": "glc", "C00002": "atp", "C00092": "glc6p", "C00008": "adp"}),
+        "LDH": ("kegg:C00022 + kegg:C00004 = kegg:C00186 + kegg:C00003",
+                {"C00022": "pyr", "C00004": "nadh", "C00186": "lac", "C00003": "nad"}),
+        "EN": ("kegg:C00631 = kegg:C00074 + kegg:C00001", {"C00631": "pg2", "C00074": "pep"}),
+        # one molecule to two: the mM -> M conversion doesn't cancel
+        "ALD": ("kegg:C00354 = kegg:C00118 + kegg:C00111", {"C00354": "fru16bp", "C00118": "grap", "C00111": "dhap"}),
+        "PDH": ("kegg:C00022 + kegg:C00010 + kegg:C00003 = kegg:C00024 + kegg:C00011 + kegg:C00004 + kegg:C00080",
+                {"C00022": "pyr_mito", "C00010": "coa_mito", "C00003": "nad_mito", "C00024": "acoa_mito",
+                 "C00011": "co2_mito", "C00004": "nadh_mito"}),
+    }
+    for rid, (formula, species) in by_hand.items():
+        reaction = cc.parse_reaction_formula(formula)
+        for kegg_id, sid in species.items():
+            reaction.set_abundance(cc.get_compound(f"kegg:{kegg_id}"), Q_(cells[sid] * 1e-3, "M"))
+        expected = cc.dg_prime(reaction).value.m_as("kJ/mol")
+        assert thermo["dg_kJ_per_mol"]["s0_hepatocyte"][rid] == pytest.approx(expected, abs=1e-6), rid
+    assert not cc.ccache.is_escalated
+
+
+def test_every_reaction_is_scored_or_excluded():
+    """Falsifies: a reaction silently dropped. The model's reactions are read through COPASI."""
+    from viva_pulse.multiscale.thermo import KOENIG_EXCLUDED, koenig_reactions
+    dm = load_model(str(koenig_2014()))
+    model = dm.getModel()
+    ids = {model.getReaction(i).getSBMLId() for i in range(model.getReactions().size())}
+    scored = koenig_reactions(koenig_2014())
+    assert set(scored) | set(KOENIG_EXCLUDED) == ids and not set(scored) & set(KOENIG_EXCLUDED)
+    assert len(scored) == 27
+
+
+def test_second_law_flags_published_and_corrected(recorded):
+    """Pre-registered from probes C-D (pH 7.2, pMg 3, I 0.25 M): König as published runs
+    ALD, TPI, PGK, EN, PEPCKM and LDH against thermodynamics; the provisional corrections
+    clear ALD, EN and LDH."""
+    subpopulations = {"published": {"weight": 0.5},
+                      "corrected": {"weight": 0.5, "metabolism_parameters": "provisional_corrections"}}
+    rows = _run(liver_tissue_replay, 3, trajectory_file=str(recorded), subpopulations=subpopulations, **THERMO)
+    flags = rows[-1]["tissue"]["thermo"]["conflicts"]
+    published = {r for r, f in flags["s0_published"].items() if f}
+    corrected = {r for r, f in flags["s0_corrected"].items() if f}
+    assert {"ALD", "TPI", "PGK", "EN", "PEPCKM", "LDH"} <= published
+    assert not {"ALD", "EN", "LDH"} & corrected
+    assert rows[-1]["tissue"]["thermo"]["conflicts_summary"]["mean_fraction"]["LDH"] == pytest.approx(0.5)
+
+
 # -- validation (no engine) ----------------------------------------------------------
 
 
@@ -310,6 +380,7 @@ def test_higher_glucose_stores_more_glycogen(recorded, tmp_path):
     ({"subpopulations": {"a": {"weight": 1.0, "rate": 2}}}, "unexpected keys"),
     ({"subpopulations": {}}, "at least one"),
     ({"stratum": 2}, "unexpected"),
+    ({"thermo": True}, "thermo needs metabolism"),
     ({"subpopulations": {"a": {"weight": 1.0, "metabolism_parameters": "refit"}}}, "unknown metabolism_parameters"),
 ])
 def test_generator_validates_when_building(params, match):
@@ -342,6 +413,12 @@ def test_unknown_cell_parameter_fails_at_construction():
     with pytest.raises(ValueError, match="not fixed global quantities"):
         EquilibratedCopasiProcess({"model_source": str(KOSCHORRECK_2008), "parameters": {"kon": 1.0}},
                                   core=allocate_core())
+
+
+def test_thermo_needs_explicit_cell_conditions():
+    from viva_pulse.multiscale.thermo import MetabolismThermo
+    with pytest.raises(ValueError, match="missing"):
+        MetabolismThermo({"model_source": str(koenig_2014()), "instances": ["a"], "p_h": 7.2}, core=build_core())
 
 
 def test_driven_parameter_must_exist_and_arrive():
