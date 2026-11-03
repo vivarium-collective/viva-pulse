@@ -41,8 +41,8 @@ workbench = [
     "plotly",
 ]
 # Lower scales under Pulse (viva_pulse.multiscale): cell models in COPASI.
-# equilibrator-api is pinned: its component-contribution estimates (and so every dG') depend on the version.
-multiscale = ["viva-copasi", "equilibrator-api==0.8.1"]
+# eQuilibrator is pinned with its compound data packages: every dG' depends on these versions.
+multiscale = ["viva-copasi", "equilibrator-api==0.8.1", "equilibrator-cache==0.8.1", "equilibrator-cache-data==0.1.0"]
 dev = ["viva-pulse[workbench]", "pytest"]
 
 # The user documentation (`make docs`); its tutorials run the real engine, so it

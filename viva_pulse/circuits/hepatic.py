@@ -5,8 +5,9 @@
   not used: Pulse holds it at its initial value (``LiverTissueExtracellular`` and
   ``LiverTissueIntracellular`` stay at 0.412 ug/L over a run while the vascular
   value moves).
-- ``liver/glucose_mM``, ``liver/lactate_mM``: glucose and lactate in the same
-  compartment, for a liver metabolism model.
+- ``liver/glucose_mM``, ``liver/lactate_mM``, ``liver/epinephrine_pmol_per_L``:
+  glucose, lactate and epinephrine in the same compartment, for a liver
+  metabolism model.
 - ``liver/tissue_mass_kg``: the liver's tissue mass.
 - ``body/core_temperature_C``: core temperature, for thermodynamics.
 
@@ -40,6 +41,9 @@ HEPATIC = CircuitModule(
         Request(path=("liver", "lactate_mM"), category="liquid_compartment_substance",
                 property="Molarity", unit=("AmountPerVolumeUnit", "mmol_Per_L"),
                 compartment="LiverVasculature", substance="Lactate"),
+        Request(path=("liver", "epinephrine_pmol_per_L"), category="liquid_compartment_substance",
+                property="Molarity", unit=("AmountPerVolumeUnit", "pmol_Per_L"),
+                compartment="LiverVasculature", substance="Epinephrine"),
         Request(path=("liver", "tissue_mass_kg"), category="tissue", property="TotalMass",
                 unit=("MassUnit", "kg"), compartment="LiverTissue"),
         Request(path=("body", "core_temperature_C"), category="physiology", property="CoreTemperature",

@@ -20,6 +20,8 @@ ORACLE = {
                               "AmountPerVolumeUnit", "mmol_Per_L"),
     ("liver", "lactate_mM"): ("cmpt_sub", "LiverVasculature", "Lactate", "Molarity",
                               "AmountPerVolumeUnit", "mmol_Per_L"),
+    ("liver", "epinephrine_pmol_per_L"): ("cmpt_sub", "LiverVasculature", "Epinephrine", "Molarity",
+                                          "AmountPerVolumeUnit", "pmol_Per_L"),
     ("liver", "tissue_mass_kg"): ("tissue", "LiverTissue", None, "TotalMass", "MassUnit", "kg"),
     ("body", "core_temperature_C"): ("physiology", None, None, "CoreTemperature", "TemperatureUnit", "C"),
     ("check", "glucose_mg_per_dL"): ("cmpt_sub", "LiverVasculature", "Glucose", "Concentration",

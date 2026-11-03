@@ -40,8 +40,8 @@ Tags: **[V]** read at the source or measured; **[A]** read by an agent, not re-v
 | SBML kinetics | `viva-tellurium` | [V] Floating species only, so it can't see all-boundary models such as Koschorreck. |
 | SBML kinetics | `viva-simbio`, `viva-pysces`, `viva-amici` | [A] Alternatives, not needed so far. |
 | Cell model: receptor | Koschorreck 2008, BIOMD0000000345 (CC0) | [V] In use. Rat hepatocyte; seconds, nM; all species boundary with rate rules. |
-| Cell model: metabolism | König hepatic glucose (`matthiaskoenig/glucose-liver`, kinetic file) | [V] Next. SBML L3V1, 36 reactions with rate laws, seconds, mM; `glc_ext`/`lac_ext` boundary; `ins`/`gamma` are rules. No license, so it is fetched, not vendored. The BioModels copies (MODEL1204270001, MODEL1209260000) have no rate laws. |
-| Thermodynamics | `viva-equilibrator` (`24da6a9`) | [V] Next. Its reaction quotient is wrong for more than one product (`processes.py:239-244`); unwired inputs get silent defaults; pMg is never set. Installs additively. |
+| Cell model: metabolism | König hepatic glucose (`matthiaskoenig/glucose-liver`, kinetic file) | [V] Built (metabolism=True). SBML L3V1, 36 reactions with rate laws, seconds, mM; `glc_ext`/`lac_ext` boundary; `ins`/`gamma` are rules. No license, so it is fetched, not vendored. The BioModels copies (MODEL1204270001, MODEL1209260000) have no rate laws. |
+| Thermodynamics | `viva-equilibrator` (`24da6a9`) | [V] Built on equilibrator-api directly (thermo=True); the wrapper's Step isn't used. Its reaction quotient is wrong for more than one product (`processes.py:239-244`); unwired inputs get silent defaults; pMg is never set. Installs additively. |
 | Spatial | `viva-pde-particle` (Jim Schaff) | [V] Later. `FVReactionDiffusion` takes `external_conc`; `SmoldynHybrid` returns `particle_counts`; it needs the `virtualcell/Smoldyn` `pyhybrid` fork built from source. |
 | Spatial | `viva-smoldyn` | [V] Excluded: `inputs()` returns `{}`. |
 | Tissue mechanics | `vivarium-tyssue` | [V] Driven by behaviours only; no physiological port. Relevant only to the cell-agents end of Dial 2. |
@@ -80,7 +80,7 @@ Code: `viva_pulse/circuits/hepatic.py`, `viva_pulse/multiscale/`, `viva_pulse/co
 - **Cells:** start at COPASI's steady state for their first drive.
   - Parameter overrides apply to fixed quantities only.
   - The drive is required.
-  - Only species are output.
+  - Species are output, plus reaction fluxes and chosen quantities when asked (metabolism cells).
 - **Amounts:** use the paper's hepatocyte, a 20 µm sphere (40 nM = 10⁵ receptors per cell) making up 78% of liver volume, at a density of 1051 g/L. That gives 3.19×10¹¹ cells in Pulse's 1.8 kg liver.
 - **Checks:**
   - A synthetic insulin step raises binding only after the step.

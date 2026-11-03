@@ -21,10 +21,19 @@ from viva_pulse.composites import liver_tissue_replay, pulse_hepatic, pulse_live
 from viva_pulse.core import build_core  # noqa: E402
 from viva_pulse.multiscale import KOSCHORRECK_2008, register_multiscale, save_hepatic_trajectory  # noqa: E402
 from viva_pulse.multiscale.models import KOENIG_PARAMETER_SETS, koenig_2014  # noqa: E402
+from viva_pulse.patients import CACHE_ENV_VAR  # noqa: E402
 from viva_pulse.multiscale.tissue import HEPATIC_PATHS  # noqa: E402
 
 BOUND = ("IR", "I2R", "IRp", "I2Rp", "IRen", "I2Ren", "IRPen", "I2RPen")  # insulin-bound receptor states
 RECEPTOR = BOUND + ("R", "Rp", "Ren", "RPen")
+
+
+@pytest.fixture(autouse=True, scope="module")
+def _model_cache(tmp_path_factory):
+    """König's model is downloaded into a temporary cache, never the user's (needs network once)."""
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setenv(CACHE_ENV_VAR, str(tmp_path_factory.mktemp("viva-pulse-cache")))
+        yield
 
 
 def _run(generator, duration, **params):
@@ -116,9 +125,9 @@ def test_no_extraction_gives_every_stratum_pulse_value():
 
 
 def test_the_block_leaves_pulse_unchanged():
-    """Falsifies: attaching the block perturbs Pulse (it must be a passive readout).
-    Every hepatic reading equals a Pulse run without the block."""
-    with_block = _run(pulse_liver_tissue, 30, strata=2)
+    """Falsifies: attaching the block, with every cell simulator on, perturbs Pulse (it
+    must be a passive readout). Every hepatic reading equals a Pulse run without it."""
+    with_block = _run(pulse_liver_tissue, 30, strata=2, extraction=0.5, metabolism=True, thermo=True)
     core = build_core()
     sim = Composite({"state": pulse_hepatic(core)}, core=core)
     sim.run(30)
@@ -230,19 +239,22 @@ def _metabolism(row):
 
 def test_metabolism_cell_equals_direct_copasi(recorded):
     """Falsifies: the metabolism cell isn't König's model driven by Pulse's liver glucose,
-    lactate and insulin (wrong species, units, timing, or insulin left to König's own
-    rule). Oracle: König loaded directly through basico, insulin switched to fixed,
-    equilibrated at the first drive, then advanced 1 s per drive by hand."""
+    lactate, insulin and epinephrine (wrong species, units, timing, or a hormone left to
+    König's own rule). Oracle: König loaded directly through basico, insulin and
+    epinephrine switched to fixed, equilibrated at the first drive, then advanced 1 s
+    per drive by hand."""
     rows = _run(liver_tissue_replay, 15, trajectory_file=str(recorded), metabolism=True)
-    drives = [(row["circuits"]["hepatic"]["liver"]["glucose_mM"], row["circuits"]["hepatic"]["liver"]["lactate_mM"],
-               row["circuits"]["hepatic"]["liver"]["insulin_pmol_per_L"]) for row in rows]
+    liver = [row["circuits"]["hepatic"]["liver"] for row in rows]
+    drives = [(x["glucose_mM"], x["lactate_mM"], x["insulin_pmol_per_L"], x["epinephrine_pmol_per_L"]) for x in liver]
     dm = load_model(str(koenig_2014()))
     set_parameters(name="ins", exact=True, status="fixed", model=dm)
+    set_parameters(name="epi", exact=True, status="fixed", model=dm)
 
-    def drive(glc, lac, ins):
+    def drive(glc, lac, ins, epi):
         set_species(name="glc_ext", exact=True, initial_concentration=glc, model=dm)
         set_species(name="lac_ext", exact=True, initial_concentration=lac, model=dm)
         set_parameters(name="ins", exact=True, initial_value=ins, model=dm)
+        set_parameters(name="epi", exact=True, initial_value=epi, model=dm)
 
     drive(*drives[0])
     assert run_steadystate(model=dm, update_model=True) in (1, 2)
@@ -283,8 +295,31 @@ def test_parameter_sets_reach_copasi_and_aggregate_by_weight(recorded):
     for species in ("lac", "glyglc", "glc6p"):
         expected = 0.25 * m["cells"]["s0_published"][species] + 0.75 * m["cells"]["s0_corrected"][species]
         assert m["cells_summary"]["mean_mM"][species] == pytest.approx(expected, rel=1e-12)
-    assert m["fluxes_summary"]["mean_flux"]["GLUT2"] == pytest.approx(
+    assert m["fluxes_summary"]["mean_mmol_per_s"]["GLUT2"] == pytest.approx(
         0.25 * m["fluxes"]["s0_published"]["GLUT2"] + 0.75 * m["fluxes"]["s0_corrected"]["GLUT2"], rel=1e-12)
+
+
+def test_each_stratum_drives_its_own_metabolism_cells(recorded):
+    """Falsifies: König cells read the wrong stratum's insulin, or the liver mean, or not
+    Pulse's epinephrine. With two strata and extraction 0.5 the strata differ; each
+    cell's insulin (pmol/L) after an update must be its own stratum's drive (nM x 1000)
+    from the start of that interval, and its epinephrine Pulse's liver value."""
+    rows = _run(liver_tissue_replay, 4, trajectory_file=str(recorded), strata=2, extraction=0.5, metabolism=True)
+    for before, after in zip(rows[1:], rows[2:]):
+        drive = before["tissue"]["drive"]
+        assert drive["s0"]["ins"] > 1.1 * drive["s1"]["ins"]
+        for stratum in ("s0", "s1"):
+            quantities = _metabolism(after)["quantities"][f"{stratum}_hepatocyte"]
+            assert quantities["ins"] == pytest.approx(drive[stratum]["ins"] * 1000.0, rel=1e-12)
+            assert quantities["epi"] == pytest.approx(
+                before["circuits"]["hepatic"]["liver"]["epinephrine_pmol_per_L"], rel=1e-12)
+
+
+def test_metabolism_input_outside_konigs_range_raises(recorded, tmp_path):
+    """Falsifies: König runs blind on a glucose below the 2-14 mM its authors analysed."""
+    low = _constant(recorded, tmp_path, seconds=3, name="hypo.json", liver__glucose_mM=1.0)
+    with pytest.raises(ValueError, match="outside the range"):
+        _run(liver_tissue_replay, 3, trajectory_file=str(low), metabolism=True)
 
 
 def test_higher_glucose_stores_more_glycogen(recorded, tmp_path):
@@ -320,6 +355,8 @@ def test_thermo_equals_equilibrator_with_hand_written_formulas(recorded):
     set_abundance, on formulas written here by hand, at the conditions the step reports."""
     rows = _run(liver_tissue_replay, 3, trajectory_file=str(recorded), **THERMO)
     thermo, cells = rows[-1]["tissue"]["thermo"], _metabolism(rows[-1])["cells"]["s0_hepatocyte"]
+    core_C = rows[-1]["circuits"]["hepatic"]["body"]["core_temperature_C"]
+    assert thermo["conditions"]["temperature_K"] == round(core_C + 273.15, 2)  # Pulse's temperature, in K
     cc, Q_ = _equilibrator(thermo["conditions"])
     # rid -> {kegg id: species id}, water/H+ written but not given an abundance
     by_hand = {
@@ -381,6 +418,8 @@ def test_second_law_flags_published_and_corrected(recorded):
     ({"subpopulations": {}}, "at least one"),
     ({"stratum": 2}, "unexpected"),
     ({"thermo": True}, "thermo needs metabolism"),
+    ({"subpopulations": {"a": {"weight": 1.0, "metabolism_parameters": "provisional_corrections"}}},
+     "needs metabolism"),
     ({"subpopulations": {"a": {"weight": 1.0, "metabolism_parameters": "refit"}}}, "unknown metabolism_parameters"),
 ])
 def test_generator_validates_when_building(params, match):

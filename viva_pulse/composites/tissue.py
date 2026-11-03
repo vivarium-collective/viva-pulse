@@ -1,9 +1,14 @@
 """Pulse over a stratified liver tissue block of COPASI cell models (docs/guide/guide-multiscale-design.md).
 
 Store layout:
+
 - ``circuits/hepatic/``: the liver's blood supply, from Pulse or a replay;
 - ``tissue/drive/s<i>``: the insulin each stratum's cells see (``{"ins": nM}``);
-- ``tissue/cells/s<i>_<subpopulation>``: each instance's species (nM);
+- ``tissue/cells/s<i>_<subpopulation>``: each instance's receptor species (nM);
+- ``tissue/metabolism/{drive,cells,fluxes,quantities,*_summary}`` (``metabolism=True``):
+  König's drive, species (mM), fluxes (mmol/s), gamma/ins/epi and their summaries;
+- ``tissue/thermo/{dg_kJ_per_mol,conflicts,standard_kJ_per_mol,conditions,*_summary}``
+  (``thermo=True``): eQuilibrator dG', second-law flags and the conditions used;
 - ``tissue/summary/<statistic>``: weighted statistics and amounts per species;
 - a ``RAMEmitter`` at ``emitter`` recording ``circuits``, ``tissue`` and time.
 
@@ -88,6 +93,8 @@ def _block(source, *, strata, extraction, max_insulin_nM, subpopulations, metabo
     check_extraction(extraction)
     if thermo and not metabolism:
         raise ValueError("thermo needs metabolism: it scores the metabolism cells' reactions")
+    if not metabolism and any(s != "published" for *_, s in instances.values()):
+        raise ValueError("metabolism_parameters needs metabolism=True")
     cells = {
         f"cell_{name}": {
             "_type": "process",
@@ -148,8 +155,8 @@ def _metabolism(instances, equilibrate, interval):
             "interval": interval,
             "config": {"model_source": str(koenig_2014()), "intervals": 1, "report_fluxes": False,
                        "parameters": dict(KOENIG_PARAMETER_SETS[set_name]), "driven": ["glc_ext", "lac_ext"],
-                       "driven_parameters": ["ins"], "equilibrate": equilibrate, "emit_fluxes": True,
-                       "emit_quantities": ["gamma"]},
+                       "driven_parameters": ["ins", "epi"], "equilibrate": equilibrate, "emit_fluxes": True,
+                       "emit_quantities": ["gamma", "ins", "epi"]},
             "inputs": {"species_counts": ["tissue", "metabolism", "drive", f"s{stratum}", "species"],
                        "parameter_drive": ["tissue", "metabolism", "drive", f"s{stratum}", "parameters"],
                        "species_concentrations": ["tissue", "metabolism", "cells", name]},
@@ -159,7 +166,8 @@ def _metabolism(instances, equilibrate, interval):
         }
         for name, (stratum, _, _, set_name) in instances.items()
     }
-    for store, unit in (("cells", "mM"), ("fluxes", "flux"), ("quantities", "value")):
+    # König's fluxes are in its amount per time: mmol/s (its cytosol is 1 L).
+    for store, unit in (("cells", "mM"), ("fluxes", "mmol_per_s"), ("quantities", "value")):
         nodes[f"aggregate_metabolism_{store}"] = {
             "_type": "step",
             "address": "local:TissueAggregate",

@@ -15,17 +15,17 @@ DIAL 4  Execution      [live, replay]  →  surrogate              gate: runs to
 
 ## The layers
 
-**Pulse.** Every second, it sends what the liver's blood carries: insulin, glucose and lactate. It also sends the liver's tissue mass and the body's core temperature.
+**Pulse.** Every second, it sends what the liver's blood carries: insulin, glucose, lactate and epinephrine. It also sends the liver's tissue mass and the body's core temperature.
 
 **Organ tissue.** The liver is split into equal slices (strata) along its blood vessel, from inlet to outlet. A configured fraction of the insulin, `extraction`, is used up along the way, and the average across slices always equals Pulse's value. The default extraction is 0 (every slice equal), because Pulse's own liver removes no insulin: Pulse clears insulin at the vena cava. Glucose and lactate are the same in every slice.
 
 **Cells.** Each slice holds one cell, built from the simulators switched on:
 
 ```
-Pulse liver blood: insulin, glucose, lactate, temperature
+Pulse liver blood: insulin, glucose, lactate, epinephrine, temperature
    │
    ├─► receptor model (always)          insulin → receptor states            Koschorreck 2008, COPASI
-   ├─► glucose metabolism (metabolism)  insulin + glucose + lactate → metabolites, fluxes, glucose output
+   ├─► glucose metabolism (metabolism)  insulin + epinephrine + glucose + lactate → metabolites, fluxes
    │                                                                          König 2012, COPASI
    └─► thermodynamics (thermo)          metabolites → ΔG' of 27 reactions, and where a reaction
                                         runs against thermodynamics          eQuilibrator
@@ -47,7 +47,7 @@ The cells never change Pulse; a test checks that Pulse's readings are identical 
 
 ## What the thermodynamics found
 
-König's model, as published, runs six reactions against thermodynamics at Pulse's liver values, whatever cell conditions are assumed. Its own equilibrium constants explain most of it: one is copied from another reaction, one is reversed, and two look like mM/M slips.
+König's model, as published, runs six reactions against thermodynamics at Pulse's liver values. Five of them do so under every cell condition tried, and the sixth under most. Its own equilibrium constants look like the cause: one appears copied from another reaction, one reversed, and two look like mM/M slips. These are hypotheses for a modeler, not established facts.
 
 A corrected set of three constants (`metabolism_parameters: "provisional_corrections"`, per subpopulation) clears the worst conflicts, but then the liver stops making glucose: the published calibration leans on the faulty values. Both run side by side; the published model is the default. A modeler should decide. Details: [cell-content-probes](../plan/cell-content-probes/README.md).
 
@@ -59,7 +59,8 @@ viva-pde-particle couples an insulin field to receptor particles. It needs Jim S
 
 - **The receptor model doesn't feed metabolism.** Metabolism responds to the insulin level through its own fitted curve.
 - **The cell's conditions are assumed:** pH 7.2, pMg 3, ionic strength 0.25 M. Pulse reports pH only in blood and has no magnesium.
-- **Glucagon comes from the metabolism model's own glucose curve,** because Pulse has no glucagon.
+- **Glucagon comes from the metabolism model's own glucose curve,** because Pulse has no glucagon. Insulin and epinephrine come from Pulse.
+- **The metabolism model only runs inside the range its authors analysed** (glucose 2–14 mM; insulin and epinephrine within its hormone curves). Outside that range a run stops instead of guessing.
 - **The receptor model describes rat hepatocytes;** the metabolism model describes human ones.
 
 ## Rules

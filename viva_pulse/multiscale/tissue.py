@@ -51,6 +51,14 @@ def strata_positions(strata: int) -> list[float]:
     return [(i + 0.5) / strata for i in range(strata)]
 
 
+#: The range of each König input its authors analysed the model over (König, Bulik &
+#: Holzhütter 2012): blood glucose 2-14 mM (their steady-state map, Figure 5); insulin
+#: and epinephrine over the span of the model's own hormone curves (``x_ins2``..``x_ins1``,
+#: ``x_epi2``..``x_epi1``). The paper states no lactate range, so lactate is unbounded.
+#: Provisional: a drive outside these raises rather than running the model blind.
+KOENIG_BOUNDS = {"glc_ext": (2.0, 14.0), "ins": (0.0, 818.9), "epi": (100.0, 6090.0)}
+
+
 def check_extraction(extraction: float) -> float:
     """The extraction fraction must lie in [0, 1]: beyond 1 the outlet strata go negative."""
     if not 0.0 <= extraction <= 1.0:
@@ -103,11 +111,19 @@ class HepaticGradient(Step):
         update = {"drive": {f"s{i}": {species: c} for i, c in enumerate(local)}}
         if self.config.get("metabolism"):
             liver = state["hepatic"]["liver"]
-            # König's model: external glucose and lactate (mM, uniform along the
-            # sinusoid) and insulin (pmol/L, the stratum's local value).
+            # König's model: external glucose and lactate (mM) and epinephrine (pmol/L),
+            # uniform along the sinusoid, and insulin (pmol/L), the stratum's local value.
             external = {"glc_ext": liver["glucose_mM"], "lac_ext": liver["lactate_mM"]}
-            update["metabolism_drive"] = {f"s{i}": {"species": dict(external), "parameters": {"ins": c * 1000.0}}
-                                          for i, c in enumerate(local)}
+            drive = {f"s{i}": {"species": dict(external),
+                               "parameters": {"ins": c * 1000.0, "epi": liver["epinephrine_pmol_per_L"]}}
+                     for i, c in enumerate(local)}
+            for stratum in drive.values():
+                values = {**stratum["species"], **stratum["parameters"]}
+                for name, (low, high) in KOENIG_BOUNDS.items():
+                    if not low <= values[name] <= high:
+                        raise ValueError(f"König input {name} = {values[name]} is outside the range its model "
+                                         f"was analysed over [{low}, {high}]")
+            update["metabolism_drive"] = drive
         return update
 
 

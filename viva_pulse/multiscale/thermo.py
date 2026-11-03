@@ -186,7 +186,9 @@ class MetabolismThermo(Step):
                     logq += nu * math.log(c * 1e-3)  # mM -> M
                 dg0, sd = standard[rid]
                 dg = dg0 + rt * logq
-                flux = fluxes[name].get(rid, 0.0)
+                if rid not in fluxes[name]:
+                    raise ValueError(f"{name}: no flux for {rid}; the second-law check needs every scored reaction")
+                flux = fluxes[name][rid]
                 dg_out[name][rid] = dg
                 conflict_out[name][rid] = 1.0 if (flux * dg > 0 and abs(dg) > 2 * sd) else 0.0
         return {"dg_kJ_per_mol": dg_out, "conflicts": conflict_out,
