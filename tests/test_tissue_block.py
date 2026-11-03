@@ -1,4 +1,4 @@
-"""The stratified liver tissue block under Pulse (plan Design 1).
+"""The stratified liver tissue block under Pulse (docs/guide/guide-multiscale-design.md).
 
 Real Pulse and real COPASI, no mocks. Oracles come from outside the block: the
 upstream ``CopasiUTCProcess`` stepped by hand, Koschorreck 2008's own geometry,

@@ -1,4 +1,4 @@
-"""The stratified tissue block under Pulse (plan Design 1), liver as the instance.
+"""The stratified tissue block under Pulse, liver as the instance (docs/guide/guide-multiscale-design.md).
 
 Pulse treats the liver's blood as one well-mixed compartment. The block spreads
 that value along the sinusoid, inlet to outlet, over ``strata`` equal-volume

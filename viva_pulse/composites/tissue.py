@@ -1,4 +1,4 @@
-"""Pulse over a stratified liver tissue block of COPASI cell models (plan Design 1).
+"""Pulse over a stratified liver tissue block of COPASI cell models (docs/guide/guide-multiscale-design.md).
 
 Store layout:
 - ``circuits/hepatic/``: the liver's blood supply, from Pulse or a replay;

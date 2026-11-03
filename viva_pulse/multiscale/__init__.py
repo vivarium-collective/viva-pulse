@@ -1,8 +1,7 @@
 """Lower scales under Pulse: a stratified liver tissue block of COPASI cell models.
 
 The cell process needs the ``multiscale`` extra (viva-copasi); the rest of the
-package imports without it. See ``docs/plan/plan-multicell-composition.md``,
-Design 1.
+package imports without it. The design: ``docs/guide/guide-multiscale-design.md``.
 """
 
 from .tissue import (KOSCHORRECK_2008, HepaticGradient, HepaticReplay, TissueAggregate, hepatic_trajectory,

@@ -1,5 +1,7 @@
 # Multi-scale composite: viva-pulse as the top scale
 
+> Superseded (2026-11-03): the design is now [docs/guide/guide-multiscale-design.md](../guide/guide-multiscale-design.md); evidence in [plan-multicell-composition.md](plan-multicell-composition.md). Kept as history.
+
 Status: scoping draft. No code in this repo changes under this plan.
 
 ## Context
