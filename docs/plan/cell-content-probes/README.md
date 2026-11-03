@@ -24,3 +24,18 @@ König's model is fetched at a pinned commit by `viva_pulse.multiscale.models.ko
   - the GAPDH flux turns from gluconeogenic (−0.021 at 4 mM, −0.017 at 6.05 mM) to glycolytic (+0.0006 at 8 mM).
 - Cost: 1.07 ms per 1 s update.
 - To check against the paper: cytosolic lactate settles at 2.4e-6 mM with external lactate at 1.64 mM.
+
+## C. Thermodynamics (`probe_c_thermo.py`)
+- Formulas are built from the model's own KEGG annotations. Two annotation slips are corrected (`h2o_mito` was H+ and becomes C00001; `h_mito` was CO2 and becomes C00080), and water is added to FBP2, EN and PC, which omit it.
+- **27 of 36 reactions are scored. 9 are excluded:** 4 transporters (GLUT2, LACT, PYRTM, PEPTM), glycogen synthesis and breakdown (a polymer), and 3 boundary exchange fluxes.
+- All of them score in 0.13 s, using eQuilibrator's bundled data only (tier `bundled`, never escalated). The `auto` tier would silently use a full 1.3 GB database when one exists on the machine.
+- **Second-law conflicts at König's steady state under Pulse's liver values:** net flux runs against ΔG′ (beyond 2σ of ΔG′°) in ALD, TPI, PGK, EN, PEPCKM and LDH. The conflicts don't hinge on the assumed cell conditions: ALD, PGK, EN, PEPCKM and LDH conflict in all 18 combinations of pH 7.0–7.4, pMg 2–4 and I 0.15–0.25 M, and TPI in 15.
+- **König's equilibrium constants vs eQuilibrator's K′ (1 M standard):**
+  - **Close (within about 2×):** GPI, G16PI, PGM and TPI.
+  - **Far:**
+    - LDH (ratio 3×10⁻⁸; it matches eQuilibrator's constant for the *reverse* direction);
+    - PEPCK (5.5×10⁴);
+    - PGK (0.004);
+    - EN (0.013; `EN_keq` equals `TPI_keq` to every digit).
+  - **ALD** matches numerically in M (0.81), but the model works in mM and ALD's constant carries a concentration unit, so the model's effective equilibrium sits 1000× away.
+- **Hypotheses for a modeler, not facts:** a copy slip (EN), a reversed constant (LDH, consistent with cytosolic lactate at 2.4e-6 mM), and unit slips (ALD, PEPCK). This is the thermodynamic layer earning its place: it finds where the kinetic model breaks the second law under Pulse's conditions.
