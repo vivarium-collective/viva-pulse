@@ -13,6 +13,8 @@ output ports and the Pulse actions its setpoints drive.
 | `supplemental_oxygen` | whole_body | inspired oxygen fraction, SpO2, PaO2, PaCO2 | `oxygen_connected`, `oxygen_flow_L_per_min` |
 | `cardiovascular_points` | whole_body | pressure (and volume, where held) for each of the 124 nodes of the cardiovascular drawing, signed flow for each of its 212 paths | none |
 | `respiratory_points` | whole_body | the same for the 24 nodes and 34 paths of the respiratory drawing | none |
+| `substances` | whole_body | the substance quantities listed in `substance_outputs`: in a vascular, tissue fluid or airway compartment, or for the whole body | none |
+| `tissues` | whole_body | the tissue values listed in `tissue_outputs`: composition constants, tissue fluid volume, pressure and flows | none |
 
 Every module's setpoints are applied as Pulse actions. Multipliers are always sent as an
 incremental change of the whole group, because a non-incremental change makes Pulse
@@ -77,6 +79,76 @@ Ordinary data requests then read them. A compartment whose only link is the path
 `Inflow - Outflow` equal to that path's flow. Pulse solves the same circuit either way: a run
 reading every point matches one without to within Pulse's own run-to-run noise (about 1e-14),
 and every reading matches Pulse's own saved circuit values.
+
+## Lymph
+
+Pulse 4.4.0 simulates no lymph, so no module reports it. Its cardiovascular circuit has a
+`Lymph` node, a path from each of the 13 tissues into it and one from it to the vena cava,
+but every tissue-to-lymph path is a flow source fixed at 0 that nothing in the engine changes.
+So no fluid flows through lymph, even during a hemorrhage or a large infusion, `Lymph` takes
+part in no substance transport, and its pressure is the vena cava's. Pulse inherited this
+unfinished part from BioGears, its 2017 ancestor; BioGears later built an active lymph model,
+which Pulse never took up. `cardiovascular_points` can read all of it (node `Lymph`, paths
+`<Tissue>T1ToLymph` and `LymphToVenaCava1`), and a test fails if a Pulse upgrade ever switches
+it on.
+
+## Substances and tissues
+
+Pulse tracks every active substance in every compartment, and the composition and fluid of
+every tissue. The `substances` and `tissues` modules read the ones you list:
+
+```python
+doc = pulse_cardiovascular(core, hemorrhage_severity=0.8,
+    substance_outputs=[
+        {"substance": "Oxygen", "compartment": "Aorta", "property": "PartialPressure", "unit": "mmHg"},
+        {"substance": "Sodium", "compartment": "BrainTissueExtracellular", "property": "Concentration", "unit": "g/L"},
+        {"substance": "Oxygen", "compartment": "LeftAlveoli", "property": "PartialPressure", "unit": "mmHg"},
+        {"substance": "Hemoglobin", "property": "MassInBlood", "unit": "g"},       # whole body
+    ],
+    tissue_outputs=[
+        {"compartment": "MuscleTissueExtracellular", "property": "Volume", "unit": "mL"},
+        {"compartment": "BrainTissue", "property": "MatrixVolume", "unit": "mL"},
+    ])
+# rows: circuits/substances/Oxygen/Aorta/partial_pressure_mmHg,
+#       circuits/substances/Hemoglobin/body/mass_in_blood_g,
+#       circuits/tissues/MuscleTissueExtracellular/volume_mL, ...
+```
+
+`pulse_cardiovascular` and `pulse_whole_body_circuits` take both lists; on `PulseCircuitProcess`
+they are config entries for the `substances` and `tissues` modules (whole_body only).
+
+| Where | Properties | Unit class |
+|---|---|---|
+| a liquid compartment (vascular, tissue fluid) | `Concentration`, `Mass`, `MassCleared`, `MassDeposited`, `MassExcreted`, `Molarity`, `PartialPressure` (gases), `Saturation` (oxygen, CO2, CO) | mass/volume, mass, amount/volume, pressure, none |
+| an airway gas compartment | `PartialPressure`, `Volume`, `VolumeFraction` | pressure, volume, none |
+| the whole body (no compartment) | `MassInBody`, `MassInBlood`, `MassInTissue`, `BloodConcentration`, `EndTidalFraction`, `EndTidalPressure` (gases) | mass, mass/volume, none, pressure |
+| a tissue (`BrainTissue`) | `MatrixVolume`, `TotalMass`, lipid fractions, tissue-to-plasma protein ratios (constants) | volume, mass, none |
+| a tissue's extracellular fluid (`BrainTissueExtracellular`) | `Volume`, `Pressure`, `Inflow`, `Outflow` | volume, pressure, volume/time |
+| a tissue's intracellular fluid | `Volume` | volume |
+
+- **Names** are Pulse's own. Units are Pulse's spellings (`mmHg`, `g/L`, `ug/L`, `mmol/L`,
+  `mL/min`); unitless properties take none. In port names `/` becomes `_per_`.
+- **Checked before the engine loads**, against the patient's own state. An entry that names an
+  unknown or inactive substance, an unknown compartment, a compartment holding none of the
+  substance, a property that substance doesn't have, or a wrong unit raises an error naming the
+  entry. Pulse itself would read NaN, crash, or create and activate the substance, which then
+  stays in saved states.
+- **Active substances only.** A state's 22 active substances (gases, hemoglobin forms,
+  electrolytes, glucose, albumin, insulin, ...) can be read; the drugs are inactive until dosed,
+  and viva-pulse can't dose one yet.
+- **Only compartments Pulse moves substances through:** the circulation (kidneys included), the
+  airway and the tissue fluids, and parents of them. Refused: `Ground` and the airway leaks and
+  needles (they read NaN), equipment compartments (0 or NaN while the device is off), `Lymph` and
+  `Pericardium` (nothing moves in or out; `Heart` still includes the pericardium).
+- **Not offered:** whole-body `PlasmaConcentration`, which Pulse computes as the mass in blood over
+  the plasma volume and calls erroneous; `Saturation` outside blood (it reads 0); `Ambient`'s
+  infinite volume; `mEq` units, which Pulse converts as if an equivalent were a mole.
+- **Clearance masses** (`MassCleared`, `MassDeposited`, `MassExcreted`) stay 0 except where Pulse
+  clears, deposits or excretes the substance (kidneys, tissues, aerosols).
+- **Whole-body masses** are Pulse's sums over its vascular compartments (`MassInBlood`) and the
+  tissue fluids (`MassInTissue`). Hemoglobin's `BloodConcentration` is all hemoglobin forms;
+  its masses are the free form only.
+- **The run is unchanged** by these readings (tested to 1e-9).
 
 ## The thermal circuit
 

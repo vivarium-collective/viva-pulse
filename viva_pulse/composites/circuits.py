@@ -98,6 +98,32 @@ _CIRCUIT_ADDITIONS = {"type": "map", "default": {},
 _POINT_READS = {"type": "boolean", "default": False,
                 "description": "Also read every node and path of the circuit drawing (whole_body only), "
                                "under circuits/<circuit>_points/"}
+_SUBSTANCE_OUTPUTS = {"type": "list", "default": [],
+                      "description": "Substance quantities to read (whole_body only), each "
+                                     "{substance, compartment (omit for whole-body values), property, unit}, "
+                                     "e.g. {substance: Oxygen, compartment: Aorta, property: PartialPressure, "
+                                     "unit: mmHg}; emitted under circuits/substances/<substance>/<compartment or "
+                                     "body>/. Checked against the patient's state when the composite is built"}
+_TISSUE_OUTPUTS = {"type": "list", "default": [],
+                   "description": "Tissue values to read (whole_body only), each {compartment, property, unit}: "
+                                  "a tissue's composition (BrainTissue: MatrixVolume, TotalMass, ...) or its fluid "
+                                  "(BrainTissueExtracellular: Volume, Pressure, Inflow, Outflow; "
+                                  "BrainTissueIntracellular: Volume); emitted under circuits/tissues/<compartment>/. "
+                                  "Checked against the patient's state when the composite is built"}
+
+
+def _reading_config(substance_outputs, tissue_outputs):
+    """Config for the ``substances``/``tissues`` modules (only the non-empty lists)."""
+    config = {"substance_outputs": list(substance_outputs or []), "tissue_outputs": list(tissue_outputs or [])}
+    return {key: value for key, value in config.items() if value}
+
+
+def _with_readings(modules, substance_outputs, tissue_outputs, model_type):
+    """``modules`` plus the ``substances``/``tissues`` modules when their lists are non-empty."""
+    extra = [name for name, entries in (("substances", substance_outputs), ("tissues", tissue_outputs)) if entries]
+    if extra and model_type != "whole_body":
+        raise ValueError(f"substance_outputs and tissue_outputs need model_type 'whole_body', got {model_type!r}")
+    return [*modules, *extra]
 
 
 def _with_points(modules, point_reads, model_type):
@@ -123,7 +149,8 @@ _CARDIOVASCULAR_PARAMETERS = {
     name="pulse_cardiovascular",
     description="The Pulse cardiovascular circuit (with its renal and tissue branches) in the real "
                 "whole-body engine: per-compartment pressures, volumes and flows plus hemodynamic "
-                "vitals, driven by circuit resistance/compliance multipliers and a hemorrhage.",
+                "vitals, driven by circuit resistance/compliance multipliers and a hemorrhage. Optional "
+                "substance and tissue readings. Pulse 4.4.0's lymph carries no flow, so it isn't reported.",
     parameters={
         "model_type": {"type": "string", "default": "whole_body", "choices": ["whole_body"],
                        "description": "Pulse engine running the circuit"},
@@ -133,6 +160,8 @@ _CARDIOVASCULAR_PARAMETERS = {
         "circuit_additions": _CIRCUIT_ADDITIONS,
         "interval": _INTERVAL,
         "point_reads": _POINT_READS,
+        "substance_outputs": _SUBSTANCE_OUTPUTS,
+        "tissue_outputs": _TISSUE_OUTPUTS,
         **_CARDIOVASCULAR_PARAMETERS,
     },
     core_extensions=[register_processes],
@@ -142,17 +171,20 @@ _CARDIOVASCULAR_PARAMETERS = {
 def pulse_cardiovascular(core=None, *, model_type="whole_body", state_file="StandardMale@0s.json",
                          patient_file="StandardMale.json", circuit_modifiers=None,
                          circuit_additions=None, interval=1.0, point_reads=False,
+                         substance_outputs=None, tissue_outputs=None,
                          hemorrhage_compartment="RightLeg", **overrides):
     config = {"hemorrhage_compartment": hemorrhage_compartment}
     CARDIOVASCULAR.check_config(config)
     setpoints = _setpoints(CARDIOVASCULAR, overrides, config)
     _reject_unknown(overrides)
     return {
-        "pulse": circuit_node(_with_points(["cardiovascular"], point_reads, model_type), model_type=model_type,
-                              state_file=state_file, patient_file=patient_file,
+        "pulse": circuit_node(_with_readings(_with_points(["cardiovascular"], point_reads, model_type),
+                                             substance_outputs, tissue_outputs, model_type),
+                              model_type=model_type, state_file=state_file, patient_file=patient_file,
                               circuit_modifiers=circuit_modifiers,
                               circuit_additions=circuit_additions, interval=interval,
-                              hemorrhage_compartment=hemorrhage_compartment),
+                              hemorrhage_compartment=hemorrhage_compartment,
+                              **_reading_config(substance_outputs, tissue_outputs)),
         "interventions": {"cardiovascular": setpoints},
         "circuits": {},
         "emitter": circuit_emitter(),
@@ -375,7 +407,7 @@ WHOLE_BODY_MODULES = (CARDIOVASCULAR, RESPIRATORY, MECHANICAL_VENTILATOR, THERMA
                 "and tissue branches), respiratory, mechanical ventilator, thermal and supplemental "
                 "oxygen, so effects that cross circuits appear in one run. All setpoints start at "
                 "their baselines; the ventilator and oxygen start disconnected, and only one of them "
-                "can be connected at a time.",
+                "can be connected at a time. Optional substance and tissue readings.",
     parameters={
         "model_type": {"type": "string", "default": "whole_body", "choices": ["whole_body"],
                        "description": "Pulse engine running the circuits"},
@@ -385,6 +417,8 @@ WHOLE_BODY_MODULES = (CARDIOVASCULAR, RESPIRATORY, MECHANICAL_VENTILATOR, THERMA
         "circuit_additions": _CIRCUIT_ADDITIONS,
         "interval": _INTERVAL,
         "point_reads": _POINT_READS,
+        "substance_outputs": _SUBSTANCE_OUTPUTS,
+        "tissue_outputs": _TISSUE_OUTPUTS,
         **_CARDIOVASCULAR_PARAMETERS,
         **{k: v for k, v in _RESPIRATORY_PARAMETERS.items()
            if k not in ("model_type", "patient_file", "circuit_modifiers", "circuit_additions",
@@ -408,6 +442,7 @@ WHOLE_BODY_MODULES = (CARDIOVASCULAR, RESPIRATORY, MECHANICAL_VENTILATOR, THERMA
 def pulse_whole_body_circuits(core=None, *, model_type="whole_body", state_file="StandardMale@0s.json",
                               patient_file="StandardMale.json",
                               circuit_modifiers=None, circuit_additions=None, interval=1.0, point_reads=False,
+                              substance_outputs=None, tissue_outputs=None,
                               hemorrhage_compartment="RightLeg", intubation_type="Tracheal",
                               ventilator_mode="AssistedControl", oxygen_device="NasalCannula", **overrides):
     config = {"hemorrhage_compartment": hemorrhage_compartment, "intubation_type": intubation_type,
@@ -422,11 +457,13 @@ def pulse_whole_body_circuits(core=None, *, model_type="whole_body", state_file=
     if len(connected) > 1:
         raise ValueError(f"only one airway device can be connected at a time, got {connected}")
     return {
-        "pulse": circuit_node(_with_points([module.name for module in WHOLE_BODY_MODULES], point_reads, model_type),
+        "pulse": circuit_node(_with_readings(_with_points([module.name for module in WHOLE_BODY_MODULES],
+                                                          point_reads, model_type),
+                                             substance_outputs, tissue_outputs, model_type),
                               model_type=model_type, state_file=state_file, patient_file=patient_file,
                               circuit_modifiers=circuit_modifiers,
                               circuit_additions=circuit_additions,
-                              interval=interval, **config),
+                              interval=interval, **config, **_reading_config(substance_outputs, tissue_outputs)),
         "interventions": interventions,
         "circuits": {},
         "emitter": circuit_emitter(),

@@ -37,6 +37,15 @@ line in `.git/info/exclude` matches every `agenda.md`).
   choices taken: tighten the pin to `protobuf>=7.35,<7.36`, and replace
   `workspace-ci.yml` with the Pulse-building workflow.
 
+### Session 2026-11-01: issues #35 and #36 (branch `feat/substances-and-lymph`)
+
+- **User request (2026-11-01):** address #35 (substance and tissue outputs) and #36 (lymph) on one new branch, one PR, following the repo's planning, documentation and validation protocol. Plan: [docs/plan/plan-substances-and-lymph.md](docs/plan/plan-substances-and-lymph.md), approved with D1a-D6a.
+- **Engine for this session:** the Mac's shell was a small Linux VM that can't run the macOS build, so Pulse `5e29e5b13` was built on Linux x86_64 in a cloud workspace (see `.build-progress.md`, "Linux build (2026-11-01)"). All probes and tests ran there. **Before the PR, the full suite must pass on the Mac** (`uv run --no-sync pytest -q -rs`); record the count and skips in the plan's section 9. Linux result: 373 passed, 1 allowlisted skip (baseline 316 + 1).
+- **Findings that change the issues:** Pulse 4.4.0 has no active lymph (zero flow sources, inherited from BioGears' 2017 code); several Pulse substance requests segfault or create substances (plan section 2).
+- **Done on the branch:** `Request.substance` and two categories; modules `substances` and `tissues`; generator parameters `substance_outputs` / `tissue_outputs`; `tests/test_substances.py`, `tests/test_lymph.py`; docs (README, `documentation/concepts/circuits.md`, API page, `CLAUDE.md`); probe and `_runs.yaml` entry; upstream note `upstream-issues/pulse.md` (drafted, not filed); a reply to #36 drafted for the user.
+- **Next (user, 2026-11-01):** after this branch, a scoping plan for `viva-biogears` (draft written 2026-11-01, kept outside this repo: `~/projects/biogears/core/Claude outputs/plan-viva-biogears.md`), a Python API for BioGears 8.x (a separate repo; recommended as its own `pybiogears` package built against an installed BioGears).
+- Not pushed; no PR opened. Ask before pushing.
+
 ### State (2026-10-23, after release)
 
 - **Released v0.2.0.**
