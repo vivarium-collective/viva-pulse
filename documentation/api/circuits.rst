@@ -21,5 +21,8 @@ setpoints drive (inputs).
 
 .. automodule:: viva_pulse.circuits.points
 
+.. automodule:: viva_pulse.circuits.substances
+   :members: LIQUID_PROPERTIES, GAS_PROPERTIES, BODY_PROPERTIES, TISSUE_PROPERTIES, TISSUE_FLUID_PROPERTIES
+
 .. automodule:: viva_pulse.circuits.additions
    :members: add_paths, check_additions, CIRCUIT, FIELDS
