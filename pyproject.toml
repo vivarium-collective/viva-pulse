@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "viva-pulse"
-version = "0.8.0"
+version = "0.8.1"
 description = "Process-bigraph wrapper for the Kitware Pulse Physiology Engine"
 readme = "README.md"
 license = "Apache-2.0"
@@ -55,7 +55,19 @@ docs = [
 # The workbench runs studies in this project's own venv (it is the only one
 # that can import PyPulse), so it is pinned to the main commit installed there.
 [tool.uv.sources]
-vivarium-workbench = { git = "https://github.com/vivarium-collective/vivarium-workbench.git", rev = "b74cb02e" }
+vivarium-workbench = { git = "https://github.com/vivarium-collective/vivarium-workbench.git", rev = "e6b1f40e" }
+
+# That workbench commit takes these from their `main` branches, so a fresh install
+# drifts with upstream (it broke on 2026-11-12: viva-superpowers 0.26.0 needed a
+# discovery-engine its sources didn't give). [tool.uv.sources] reaches only direct
+# dependencies, so they are pinned here, to the commits this release was tested with.
+# `uv pip install` and `uv sync` both apply overrides from this file.
+[tool.uv]
+override-dependencies = [
+    "viva-superpowers[evaluator] @ git+https://github.com/vivarium-collective/viva-superpowers.git@2abbb2343c5924ffcd0dff6d0a19b48e40e71c47",
+    "viva-basic-processes @ git+https://github.com/vivarium-collective/viva-basic-processes.git@9a1a624dc925cf700c3f89a8cc008a8fa4b4e5d4",
+    "viva-workspace @ git+https://github.com/vivarium-collective/viva-workspace.git@7ad2eb1a43bbb502158a69982c608f5aa66a1de6",
+]
 
 [tool.hatch.build.targets.wheel]
 packages = ["viva_pulse"]
