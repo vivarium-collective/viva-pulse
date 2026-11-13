@@ -142,14 +142,22 @@ jobs:
           import importlib.metadata as md, json, os, tomllib
           import google.protobuf
           assert google.protobuf.__version__ == os.environ["PROTOBUF_VERSION"], google.protobuf.__version__
-          # The [tool.uv.sources] pin: CI must run the workbench the project declares.
+          # The pins: CI must run the workbench, and the upstreams it would take from
+          # their main branches, at the commits the project declares.
           with open("pyproject.toml", "rb") as f:
-              pinned = tomllib.load(f)["tool"]["uv"]["sources"]["vivarium-workbench"]["rev"]
-          vcs = json.loads(md.distribution("vivarium-workbench").read_text("direct_url.json"))["vcs_info"]
-          # The pin may be a short SHA: check uv installed that exact rev, and the
-          # commit it resolved to.
-          assert vcs.get("requested_revision") == pinned and vcs["commit_id"].startswith(pinned), (vcs, pinned)
-          print("protobuf", google.protobuf.__version__, "| vivarium-workbench", vcs["commit_id"])
+              uv = tomllib.load(f)["tool"]["uv"]
+          pins = {"vivarium-workbench": uv["sources"]["vivarium-workbench"]["rev"]}
+          pins.update(
+              (req.split("@")[0].split("[")[0].strip(), req.rsplit("@", 1)[1])
+              for req in uv["override-dependencies"]
+          )
+          for dist, pinned in pins.items():
+              vcs = json.loads(md.distribution(dist).read_text("direct_url.json"))["vcs_info"]
+              # The pin may be a short SHA: check uv installed that exact rev, and the
+              # commit it resolved to.
+              assert vcs.get("requested_revision") == pinned and vcs["commit_id"].startswith(pinned), (dist, vcs, pinned)
+              print(dist, vcs["commit_id"])
+          print("protobuf", google.protobuf.__version__)
           EOF
 
       # After the install: the check imports Pulse's Python API, which needs
