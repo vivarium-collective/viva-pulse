@@ -10,9 +10,13 @@ A reloaded state continues the run closely but not bit-identically: saved at 10 
 advanced 20 s, every vital agrees with the uninterrupted run to 2e-8 relative (probe
 ``save-states-2026-10-25``).
 
+Times are compared in Pulse steps (0.02 s), not in seconds: the engine's clock is a running
+sum of steps, so it drifts off the exact time (10 s is reached as 9.999999999999876, and the
+same sum reaches 12 h as 43199.999999 after 2.16 million steps). The engine is at step
+``round(t / step)``, and a requested time is reached at the first step at or after it.
 Files are named ``<name>@<t>s.json``, Pulse's own convention for its shipped states, with
-``t`` the engine's simulation time rounded to the microsecond (Pulse advances in 0.02 s
-steps, so 10 s is reached as 9.999999999999876). An existing file is never overwritten.
+``t`` the time of the engine's step rounded to the microsecond. An existing file is never
+overwritten.
 
 Only whole-body engines can be saved: Pulse doesn't serialize VentilationMechanics.
 ``save_states`` drives the engine it is given. It is for an engine you hold (Pulse's API,
@@ -32,8 +36,32 @@ import math
 from pathlib import Path
 from typing import Sequence
 
-#: Saved-state names use the engine's time rounded to this many decimals (1 µs).
+#: Saved-state names use the engine's step's time rounded to this many decimals (1 µs).
 TIME_DECIMALS = 6
+#: A requested time within this fraction of a step of a step boundary is on it.
+STEP_DECIMALS = 6
+
+
+def time_step_s(engine) -> float:
+    """The engine's time step in seconds (0.02 in every shipped state).
+
+    ``PulseEngine`` has no public accessor for it. It keeps the binding's
+    ``get_timestep("s")`` in ``_dt_s``, read at construction and after every load, and
+    ``advance_time_s`` counts its steps by it; the binding itself is name-mangled.
+    """
+    return engine._dt_s
+
+
+def engine_step(engine) -> int:
+    """The engine's step: its clock drifts off the step's exact time by far less than half a
+    step (1.3e-5 s after 48 h)."""
+    return round(engine.pull_data()[0] / time_step_s(engine))
+
+
+def first_step_at_or_after(t: float, step_s: float) -> int:
+    """The first step at or after time ``t`` (0.14 s / 0.02 s is 7.000000000000001 in
+    floating point, and still step 7)."""
+    return math.ceil(round(t / step_s, STEP_DECIMALS))
 
 
 def _seconds(t: float) -> str:
@@ -61,7 +89,7 @@ class StateSaver:
     A process advances its engine by its own interval, so a save never steps the engine:
     stepping to an exact time inside an update would shift the rest of that update and
     change the run. Called after the engine loads and after every update; when one or more
-    pending times have been reached, it saves once, named by the engine's time. Times past
+    pending times have been reached, it saves once, at the engine's step. Times past
     the end of the run are never saved. States of the same name already in ``out_dir``
     raise at construction; two processes saving into one directory need different names.
     """
@@ -80,11 +108,13 @@ class StateSaver:
         self.saved: list[Path] = []
 
     def __call__(self, engine) -> None:
-        now = round(engine.pull_data()[0], TIME_DECIMALS)
-        if self.pending and round(self.pending[0], TIME_DECIMALS) <= now:
-            while self.pending and round(self.pending[0], TIME_DECIMALS) <= now:
+        now, step_s = engine_step(engine), time_step_s(engine)
+        if self.pending and first_step_at_or_after(self.pending[0], step_s) <= now:
+            while self.pending and first_step_at_or_after(self.pending[0], step_s) <= now:
                 self.pending.pop(0)
-            self.saved += save_states(engine, self.out_dir, [engine.pull_data()[0]], self.name)
+            # The step's exact time, not the clock: a clock reading just past the step
+            # would round up to the next step, and save_states would advance to it.
+            self.saved += save_states(engine, self.out_dir, [now * step_s], self.name)
 
 
 def save_states(engine, out_dir: str | Path, times_s: Sequence[float], name: str = "state") -> list[Path]:
@@ -92,9 +122,12 @@ def save_states(engine, out_dir: str | Path, times_s: Sequence[float], name: str
 
     ``engine`` is a loaded whole-body ``pulse.engine.PulseEngine`` (a state file, an edited
     state, a stabilized patient); any other raises before it is advanced. ``times_s`` are
-    absolute simulation times, in increasing order and not before the engine's current
-    time. Each state is saved at the first Pulse step (0.02 s) at or after its time, so two
-    times within one step raise; a time equal to the current one saves without advancing.
+    absolute simulation times, in increasing order, none of them on a step before the
+    engine's. Each state is saved at the first Pulse step (0.02 s) at or after its time, so
+    two times within one step raise, and a time on the engine's current step saves without
+    advancing. The engine's clock reading is not such a time: it drifts off its step, and
+    one more than 1e-8 s past it falls on the next step. To save at the current step, pass
+    ``engine_step(engine) * time_step_s(engine)``.
     An existing file raises instead of being overwritten. Returns the written paths, in
     order. Raises if Pulse fails to advance (for example an irreversible state) or to save;
     files written before the failure stay.
@@ -106,9 +139,10 @@ def save_states(engine, out_dir: str | Path, times_s: Sequence[float], name: str
         raise ValueError("Pulse can't save this engine's state (only whole-body engines serialize; "
                          "VentilationMechanics doesn't)")
     engine.advance_time_s(0.0)  # pulls, so pull_data()[0] is the current simulation time
-    now = engine.pull_data()[0]
-    if round(times[0], TIME_DECIMALS) < round(now, TIME_DECIMALS):
-        raise ValueError(f"times_s starts at {times[0]} s, before the engine's time {now} s")
+    step_s = time_step_s(engine)
+    if first_step_at_or_after(times[0], step_s) < engine_step(engine):
+        raise ValueError(f"times_s starts at {times[0]} s, before the engine's time "
+                         f"{engine.pull_data()[0]} s")
 
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
@@ -117,17 +151,20 @@ def save_states(engine, out_dir: str | Path, times_s: Sequence[float], name: str
         # One Pulse step at a time: advance_time_s takes int(duration / dt) steps, and a
         # duration computed as t - now is one step short whenever now has drifted just above a
         # step (advance_time_s(4 - 3.000000000000002) ends at 3.98).
-        while round(now, TIME_DECIMALS) < round(t, TIME_DECIMALS):
+        target = first_step_at_or_after(t, step_s)
+        while engine_step(engine) < target:
             if not engine.advance_time():
-                raise RuntimeError(f"Pulse failed to advance to {t} s (engine at {now} s)")
-            now = engine.pull_data()[0]
+                raise RuntimeError(f"Pulse failed to advance to {t} s "
+                                   f"(engine at {engine.pull_data()[0]} s)")
+        now = engine_step(engine) * step_s
         path = out / f"{name}@{_seconds(now)}s.json"
         if path in paths:
-            raise ValueError(f"times {t} s and an earlier one both fall on Pulse's step at {now} s")
+            raise ValueError(f"times {t} s and an earlier one both fall on Pulse's step at "
+                             f"{_seconds(now)} s")
         if path.exists():
             raise FileExistsError(f"{path} exists; save_states never overwrites a state")
         if not engine.serialize_to_file(str(path)):
-            raise RuntimeError(f"Pulse failed to save its state at {now} s to {path}")
+            raise RuntimeError(f"Pulse failed to save its state at {_seconds(now)} s to {path}")
         paths.append(path)
     return paths
 

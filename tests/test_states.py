@@ -15,9 +15,9 @@ import pytest
 
 import viva_pulse
 from viva_pulse.core import build_core
-from viva_pulse.processes import VITALS, PulseProcess, _initialize_engine, _load_engine
+from viva_pulse.processes import VITALS, PulseProcess, _initialize_engine, _load_engine, _load_state
 from viva_pulse.runtime import ensure_pulse_importable
-from viva_pulse.states import save_states
+from viva_pulse.states import StateSaver, save_states
 
 
 def _requests():
@@ -42,6 +42,24 @@ def _bleeding():
 
 def _time(path):
     return json.loads(path.read_text())["SimulationTime"]["ScalarTime"].get("Value", 0.0)
+
+
+class Drifted:
+    """A real engine whose clock (``pull_data()[0]``) reads ``by`` seconds below its true
+    time, as Pulse's does on long runs: its time is a running sum of 0.02 s steps, which
+    reaches 12 h as 43199.999999. Everything else, stepping and saving included, is the
+    real engine."""
+
+    def __init__(self, engine, by):
+        self._engine, self._by = engine, by
+
+    def __getattr__(self, name):
+        return getattr(self._engine, name)
+
+    def pull_data(self):
+        data = self._engine.pull_data().copy()
+        data[0] -= self._by
+        return data
 
 
 def test_states_are_saved_at_each_time_and_named_by_it(tmp_path):
@@ -129,11 +147,15 @@ def test_the_command_line_saves_a_sequence(tmp_path):
 
 def test_a_time_between_steps_saves_at_the_next_step(tmp_path):
     """Falsifies: a time between Pulse's 0.02 s steps is saved before it, or named by the
-    request rather than the time the state holds."""
+    request rather than the time the state holds; or a time on a step that floating point
+    puts just past it is saved a step later."""
     engine = _load_engine("", "HumanAdultWholeBody", "StandardMale@0s.json", [])
     (path,) = save_states(engine, tmp_path, [1.01], name="mid")
     assert path.name == "mid@1.02s.json"
     assert _time(path) == pytest.approx(1.02, abs=1e-9)
+    # 0.14 / 0.02 is 7.000000000000001 in floating point: still step 7, not 8.
+    engine = _load_engine("", "HumanAdultWholeBody", "StandardMale@0s.json", [])
+    assert save_states(engine, tmp_path, [0.14], name="on")[0].name == "on@0.14s.json"
 
 
 def test_two_times_in_one_step_raise(tmp_path):
@@ -141,6 +163,100 @@ def test_two_times_in_one_step_raise(tmp_path):
     engine = _load_engine("", "HumanAdultWholeBody", "StandardMale@0s.json", [])
     with pytest.raises(ValueError, match="both fall on Pulse's step"):
         save_states(engine, tmp_path, [1.005, 1.01])
+
+
+def test_steps_are_the_loaded_engines_own(tmp_path):
+    """Falsifies: times counted in a fixed 0.02 s step, or in the step the engine had before
+    the state loaded, instead of the loaded state's own (PulseEngine has no public accessor;
+    ``time_step_s`` reads its ``_dt_s``). With a 0.01 s step, 0.01 s would be saved at 0.02 s."""
+    state = json.loads((ensure_pulse_importable() / "states" / "StandardMale@0s.json").read_text())
+    state["Configuration"]["TimeStep"]["ScalarTime"]["Value"] = 0.01
+    engine = _load_state("", "HumanAdultWholeBody", state, [])
+    (path,) = save_states(engine, tmp_path, [0.01], name="fine")
+    assert path.name == "fine@0.01s.json"
+    assert _time(path) == pytest.approx(0.01, abs=1e-9)
+
+
+DRIFTS = pytest.mark.parametrize("by", [2e-6, -3e-6], ids=["clock short", "clock long"])
+
+
+@DRIFTS
+def test_a_drifted_clock_saves_at_the_time_without_an_extra_step(tmp_path, by):
+    """Falsifies: comparing times in seconds, where a clock a microsecond short of the time
+    takes one more step (0 s saved at 0.02 s, 10 s at 10.02 s), and a clock a microsecond
+    long puts the engine past the time it is at (0 s refused as before the engine's time)."""
+    engine = _load_engine("", "HumanAdultWholeBody", "StandardMale@0s.json", [])
+    paths = save_states(Drifted(engine, by), tmp_path, [0, 10], "run")
+    assert [p.name for p in paths] == ["run@0s.json", "run@10s.json"]
+    assert [_time(p) for p in paths] == pytest.approx([0, 10], abs=1e-9)
+
+
+@DRIFTS
+def test_a_drifted_clock_starts_at_its_step(tmp_path, by):
+    """Falsifies: the start check comparing seconds, where a clock a microsecond past 10 s
+    refuses 10 s as before the engine's time; or a check loose enough to accept the step
+    before (9.98 s). The time the engine is at saves without advancing it."""
+    engine = _load_engine("", "HumanAdultWholeBody", "StandardMale@0s.json", [])
+    assert engine.advance_time_s(10.0)
+    drifted = Drifted(engine, by)
+    with pytest.raises(ValueError, match="before the engine's time"):
+        save_states(drifted, tmp_path, [9.98], "early")
+    assert [p.name for p in save_states(drifted, tmp_path, [10], "at")] == ["at@10s.json"]
+    assert engine.pull_data()[0] == pytest.approx(10, abs=1e-9)
+
+
+@DRIFTS
+@pytest.mark.parametrize("at", [0.0, 10.0], ids=["at load", "after an update"])
+def test_a_process_saver_on_a_drifted_clock_saves_when_the_time_is_reached(tmp_path, by, at):
+    """Falsifies: the saver missing a time its update reached because the clock reads a
+    microsecond short, then saving an update later (12 h saved at 12 h 1 s); or, with the
+    clock a microsecond long, naming the state by the clock, or stepping the engine to the
+    next step to save, which shifts the rest of the run. At load (the saver's first call)
+    the engine has not advanced, and 0 s must be saved there."""
+    engine = _load_engine("", "HumanAdultWholeBody", "StandardMale@0s.json", [])
+    assert engine.advance_time_s(at)
+    before = engine.pull_data()[0]
+    saver = StateSaver([at], tmp_path, "run")
+    saver(Drifted(engine, by))
+    assert [p.name for p in saver.saved] == [f"run@{at:g}s.json"]
+    assert _time(saver.saved[0]) == pytest.approx(at, abs=1e-9)
+    assert engine.pull_data()[0] == before
+
+
+@DRIFTS
+def test_a_process_saver_on_a_drifted_clock_waits_for_the_time(tmp_path, by):
+    """Falsifies: the saver saving a time at the step before it (a clock a microsecond long
+    of 0 s taken for 0.02 s), or not at the step that reaches it."""
+    engine = _load_engine("", "HumanAdultWholeBody", "StandardMale@0s.json", [])
+    saver = StateSaver([0.02], tmp_path, "run")
+    saver(Drifted(engine, by))
+    assert saver.saved == []
+    assert engine.advance_time()
+    saver(Drifted(engine, by))
+    assert [p.name for p in saver.saved] == ["run@0.02s.json"]
+
+
+@pytest.mark.parametrize("clock, t", [(43199.999998952546, 43200.0), (27160.0000005, 27160.0)],
+                         ids=["12 h, short", "27160 s, long"])
+@pytest.mark.parametrize("saver", [True, False], ids=["StateSaver", "save_states"])
+def test_the_clock_pulse_reaches_saves_at_its_step(tmp_path, clock, t, saver):
+    """Falsifies: the comparison failing on clock values Pulse itself reaches, with nothing
+    wrapped. Pulse's clock is a running sum of 0.02 s steps; that sum, which the engine
+    matches bit for bit at 10 s and 1 h, reads 12 h as 43199.999998952546 and 27160 s as
+    27160.0000005. Comparing rounded seconds, the saver saved nothing at 12 h and
+    save_states stepped to 43200.02; at 27160 s the saver stepped the engine to save."""
+    state = json.loads((ensure_pulse_importable() / "states" / "StandardMale@0s.json").read_text())
+    state["SimulationTime"] = {"ScalarTime": {"Value": clock, "Unit": "s"}}
+    engine = _load_state("", "HumanAdultWholeBody", state, [])
+    assert engine.pull_data()[0] == clock
+    if saver:
+        state_saver = StateSaver([t], tmp_path, "r")
+        state_saver(engine)
+        paths = state_saver.saved
+    else:
+        paths = save_states(engine, tmp_path, [t], "r")
+    assert [p.name for p in paths] == [f"r@{t:g}s.json"]
+    assert engine.pull_data()[0] == clock
 
 
 def test_an_existing_state_is_never_overwritten(tmp_path):

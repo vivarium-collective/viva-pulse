@@ -175,7 +175,7 @@ python -m viva_pulse.states StandardMale@0s.json --times 60 120 --out states/
 
 - The state holds everything the engine held, including paths and actions added during the run: a hemorrhage's bleed path and link are in it, and the bleed continues after reload.
 - A reloaded state continues the run closely, but not bit-identically. Saved during a hemorrhage at 10 s and advanced 20 s, every vital agrees with the uninterrupted run to 2e-8 relative.
-- Each state is saved at the first Pulse step (0.02 s) at or after its time. The file name uses the engine's time rounded to the microsecond; the state records the exact `SimulationTime`.
+- Each state is saved at the first Pulse step (0.02 s) at or after its time. Times are counted in steps, because Pulse's clock is a running sum of steps and drifts on long runs (at 12 h it reads 43199.999999, to the microsecond). The file name uses the step's time rounded to the microsecond (`@43200s`); the state records Pulse's own `SimulationTime`.
 - On the command line, a bare name is a state in `<install>/bin/states/`; anything with a path separator is a path.
 - Whole-body engines only (Pulse doesn't serialize ventilation-mechanics); others raise before anything is advanced. An existing file is never overwritten, and two times within one step raise. To merge time lists from several sources, round each time up to its step and drop duplicates first: `times = sorted({math.ceil(round(t / 0.02, 6)) * 0.02 for t in times})`.
 - Pass all times in one call. Measured on an Apple-silicon Mac, saving every step costs about 26 ms and 2.5 MB per state (about twice the time with one call per state), and the engine runs about 33x faster than real time between saves.
