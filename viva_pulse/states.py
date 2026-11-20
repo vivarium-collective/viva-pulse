@@ -138,7 +138,10 @@ def save_states(engine, out_dir: str | Path, times_s: Sequence[float], name: str
     if not engine.serialize_to_string(PyPulse.serialization_format.json):
         raise ValueError("Pulse can't save this engine's state (only whole-body engines serialize; "
                          "VentilationMechanics doesn't)")
-    engine.advance_time_s(0.0)  # pulls, so pull_data()[0] is the current simulation time
+    # pull_data()[0] is already the engine's time: PulseEngine pulls after every successful
+    # load and advance. Pulling again with advance_time_s(0.0) would step the engine whenever
+    # Pulse holds a step's worth of time from an earlier advance_time_s, which takes only
+    # whole steps and keeps the rest (1.18 s takes 58 and holds 0.020000000000000018 s).
     step_s = time_step_s(engine)
     if first_step_at_or_after(times[0], step_s) < engine_step(engine):
         raise ValueError(f"times_s starts at {times[0]} s, before the engine's time "

@@ -236,6 +236,42 @@ def test_a_process_saver_on_a_drifted_clock_waits_for_the_time(tmp_path, by):
     assert [p.name for p in saver.saved] == ["run@0.02s.json"]
 
 
+def test_saving_at_the_engines_step_leaves_the_time_pulse_holds(tmp_path):
+    """Falsifies: save_states stepping an engine that Pulse holds time for. advance_time_s
+    takes int(duration / dt) whole steps and keeps the rest for its next call; 1.18 s is
+    58.99999999999999 steps, so the engine stops at 1.16 s holding 0.020000000000000018 s,
+    just over a step. Pulling with advance_time_s(0.0) took that step, then refused 1.16 s
+    as before the engine's time. The saved engine must run on exactly as an unsaved one."""
+    saved, unsaved = (_load_engine("", "HumanAdultWholeBody", "StandardMale@0s.json", []) for _ in range(2))
+    for engine in (saved, unsaved):
+        assert engine.advance_time_s(1.18)
+    assert saved.pull_data()[0] == pytest.approx(1.16, abs=1e-9)  # Pulse held a step back
+    assert [p.name for p in save_states(saved, tmp_path, [1.16], "r")] == ["r@1.16s.json"]
+    assert _time(tmp_path / "r@1.16s.json") == pytest.approx(1.16, abs=1e-9)
+    assert saved.pull_data()[0] == unsaved.pull_data()[0]
+    for engine in (saved, unsaved):
+        assert engine.advance_time_s(1.18)
+    assert saved.pull_data()[0] == unsaved.pull_data()[0]
+
+
+def test_a_state_loaded_into_an_engine_holding_time_saves_at_its_start(tmp_path):
+    """Falsifies: save_states stepping an engine that still holds time from before a load.
+    PulseEngine resets the time it holds only when it is constructed, so an engine holding
+    0.020000000000000018 s after advance_time_s(1.18) still holds it once a 0 s state is
+    loaded into it; pulling with advance_time_s(0.0) stepped it to 0.02 s and refused 0 s."""
+    state = ensure_pulse_importable() / "states" / "StandardMale@0s.json"
+    from pulse.cdm.engine import SEDataRequestManager
+
+    engine = _load_engine("", "HumanAdultWholeBody", "StandardMale@0s.json", [])
+    assert engine.advance_time_s(1.18)
+    assert engine.pull_data()[0] == pytest.approx(1.16, abs=1e-9)  # Pulse held a step back
+    assert engine.serialize_from_file(str(state), SEDataRequestManager([]))
+    loaded = engine.pull_data()[0]
+    assert loaded == pytest.approx(0, abs=1e-9)
+    assert [p.name for p in save_states(engine, tmp_path, [0], "r")] == ["r@0s.json"]
+    assert engine.pull_data()[0] == loaded
+
+
 @pytest.mark.parametrize("clock, t", [(43199.999998952546, 43200.0), (27160.0000005, 27160.0)],
                          ids=["12 h, short", "27160 s, long"])
 @pytest.mark.parametrize("saver", [True, False], ids=["StateSaver", "save_states"])
@@ -295,13 +331,15 @@ def test_bad_names_raise(tmp_path, name):
         save_states(engine, tmp_path, [1], name=name)
 
 
-def _run(generator, seconds, save=None, **params):
+def _run(generator, seconds, save=None, interval=None, **params):
     from process_bigraph import Composite, gather_emitter_results
 
     core = build_core()
     document = generator(core, **params)
     if save:
         document["pulse"]["config"].update(save)
+    if interval is not None:
+        document["pulse"]["interval"] = interval
     sim = Composite({"state": document}, core=core)
     sim.run(seconds)
     return gather_emitter_results(sim)[("emitter",)]
@@ -325,6 +363,35 @@ def test_a_process_saves_at_update_boundaries_without_changing_the_run(tmp_path,
     assert sorted(p.name for p in tmp_path.iterdir()) == ["run@0s.json", "run@3s.json", "run@5s.json"]
     assert [_time(tmp_path / f"run@{t}s.json") for t in (0, 3, 5)] == pytest.approx([0, 3, 5], abs=1e-9)
     assert_rows_close(saved_rows, _run(make, 6, **params))
+
+
+@pytest.mark.parametrize("generator, params", [
+    ("pulse_hemorrhage", {"severity": 0.5}),
+    ("pulse_cardiovascular", {"hemorrhage_severity": 0.5}),
+], ids=["PulseProcess", "PulseCircuitProcess"])
+def test_a_process_saves_without_stepping_the_time_pulse_holds(tmp_path, generator, params,
+                                                                 assert_rows_close):
+    """Falsifies: a process's saver stepping its engine when an update isn't a whole number of
+    Pulse steps in floating point. A 1.18 s update ends the engine at 1.16 s, holding
+    0.020000000000000018 s for the next one; the save took that step and raised, ending the
+    run. States must be saved at the update boundaries an unsaved engine reaches, and the rows
+    must match an unsaved run's."""
+    import viva_pulse.composites as composites
+
+    engine = _load_engine("", "HumanAdultWholeBody", "StandardMale@0s.json", [])
+    boundaries = [engine.pull_data()[0]]
+    for _ in range(2):
+        assert engine.advance_time_s(1.18)
+        boundaries.append(engine.pull_data()[0])
+    assert boundaries == pytest.approx([0, 1.16, 2.36], abs=1e-9)  # Pulse held a step at 1.16
+
+    make = getattr(composites, generator)
+    save = {"save_state_times_s": [0, 1.1, 2.3], "save_state_dir": str(tmp_path), "save_state_name": "run"}
+    saved_rows = _run(make, 3.6, save, interval=1.18, **params)
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["run@0s.json", "run@1.16s.json", "run@2.36s.json"]
+    assert [_time(tmp_path / f"run@{t}s.json") for t in ("0", "1.16", "2.36")] == \
+        pytest.approx(boundaries, abs=1e-9)
+    assert_rows_close(saved_rows, _run(make, 3.6, interval=1.18, **params))
 
 
 
