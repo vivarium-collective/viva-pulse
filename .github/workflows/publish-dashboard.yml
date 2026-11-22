@@ -88,6 +88,8 @@ jobs:
         # the run stays green. Force a re-fetch of the tip.
         run: uv pip install --refresh-package vivarium-workbench --reinstall-package vivarium-workbench "vivarium-workbench @ git+https://github.com/vivarium-collective/vivarium-workbench.git@main"
 
+      - name: Pin compatible process-bigraph (workbench@main needs >=1.11.0; avoids bigraph_schema.matching skew)
+        run: uv pip install --reinstall-package process-bigraph "process-bigraph>=1.11.0"
       - name: Build read-only workbench snapshot
         # Run inside the activated venv, NOT `uv run` — `uv run` re-syncs to
         # uv.lock first, which would undo the ad-hoc vivarium-workbench@main
