@@ -1,6 +1,6 @@
 ## Current Session
 
-Goal: `/viva-expert ./` (run from `~/uchc/twin/engine`) — heavy single-tool
+Goal: `/viva:model ./` (run from `~/uchc/twin/engine`) — heavy single-tool
 mode, REAL bridge to the Kitware Pulse Physiology Engine. Wrapper repo is
 this directory (user-chosen). Build pins, phase ledger, probe results and
 workarounds: [.build-progress.md](.build-progress.md) — read it first.

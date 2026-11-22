@@ -1,6 +1,6 @@
 """CohortBloodLoss: fraction of blood lost against starting blood volume, one dot per patient.
 
-Written with /viva-viz for the patient-cohort study. Patient names reach a
+Written with /viva:viz for the patient-cohort study. Patient names reach a
 Visualization only through a declared ``run_labels`` input port, which this class
 doesn't declare, so the per-patient MAP traces are a labelled comparative
 visualization instead.

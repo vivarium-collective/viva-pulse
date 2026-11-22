@@ -113,7 +113,7 @@ classes (`pulse/cdm/patient_actions.py`).
   was written by a subagent and is unverified.
 - `CONTRIBUTING.md` and `.github/workflows/release.yml` are still open, and
   the protobuf pin has not been tightened.
-- **Rigor.** `/viva-harden-investigation` was abandoned with three untriaged
+- **Rigor.** `/viva:harden` was abandoned with three untriaged
   gaps, recorded in `CURRENT.md`:
   - the baroreflex causal claim has no ablation;
   - saline vs blood is not root-caused;

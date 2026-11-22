@@ -1,6 +1,6 @@
 """HemorrhageSeverityResponse: final vitals against bleed severity, plus MAP over time.
 
-Written with /viva-viz for the hemorrhage-severity-sweep study.
+Written with /viva:viz for the hemorrhage-severity-sweep study.
 """
 
 from process_bigraph.visualization import Visualization

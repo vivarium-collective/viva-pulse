@@ -107,7 +107,7 @@ The per-circuit composite plan (approved 2026-10-22) is [docs/plan/plan-circuit-
 ## Workbench studies
 
 The investigation `pulse-hemorrhage` (`workspace/investigations/`) groups three studies (`workspace/studies/<slug>/`, flat, as the workbench's own `/api/study-create` writes them): `hemorrhage-severity-sweep`, `fluid-resuscitation` and `patient-cohort`.
-- Create and edit studies through the workbench API (`/viva-study`, `/viva-investigation`); narrative and pre-registration fields are YAML-direct, as the skills specify.
+- Create and edit studies through the workbench API (`/viva:study`, `/viva:investigate`); narrative and pre-registration fields are YAML-direct, as the skills specify.
 - Run them with `POST /api/investigation-run-unblocked {"investigation": "pulse-hemorrhage"}`. It queues `baseline[0]` plus every variant, so a study keeps one baseline and expresses other arms as variants; a variant may name its own `composite`. It passes no step count, so each baseline carries `n_steps: 600` in its params.
 - The workbench runs `kind: sweep` only through v2ecoli-workflow, so a sweep is one variant per grid point (and the cohort one variant per `state_file`).
 - The record is each study's `runs.db` (committed): `runs_meta` has the manifest (params, git sha, Python, package version), `history` the readouts. Only `readouts[].store_path` paths are recorded.

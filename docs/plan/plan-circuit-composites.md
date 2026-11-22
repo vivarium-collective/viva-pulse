@@ -138,7 +138,7 @@ Probe scripts live in the scratchpad and run with `uv run --no-sync`. **Every He
 
 - `uv run --no-sync pytest -q` (timeout 600000 ms): everything passes against the real engine, with Hemodynamics tests isolated in subprocesses.
 - Phase 0 probe outputs recorded in `.build-progress.md`.
-- `/viva-run pulse_cardiovascular` smoke run once the workspace exists.
+- `/viva:run pulse_cardiovascular` smoke run once the workspace exists.
 - `/adversarial` review of each phase's diff.
 
 ## Critical files
