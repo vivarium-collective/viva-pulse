@@ -44,7 +44,7 @@ variants:
   parameter_overrides: {compound: Blood, target_map_mmHg: 90.0, n_steps: 600, ...}
 ```
 
-Create studies and their entries through the workbench API (or the `/viva-study` skill), for
+Create studies and their entries through the workbench API (or the `/viva:study` skill), for
 example `POST /api/study-create`, `/api/study-baseline-add` and `/api/study-variant-add`.
 
 - **A sweep is one variant per value.** The workbench runs `kind: sweep` only through its

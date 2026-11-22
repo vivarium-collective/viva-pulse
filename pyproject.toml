@@ -66,7 +66,7 @@ vivarium-workbench = { git = "https://github.com/vivarium-collective/vivarium-wo
 override-dependencies = [
     "viva-superpowers[evaluator] @ git+https://github.com/vivarium-collective/viva-superpowers.git@2abbb2343c5924ffcd0dff6d0a19b48e40e71c47",
     "viva-basic-processes @ git+https://github.com/vivarium-collective/viva-basic-processes.git@9a1a624dc925cf700c3f89a8cc008a8fa4b4e5d4",
-    "viva-workspace @ git+https://github.com/vivarium-collective/viva-workspace.git@7ad2eb1a43bbb502158a69982c608f5aa66a1de6",
+    "viva-workspace @ git+https://github.com/vivarium-collective/viva:workspace.git@7ad2eb1a43bbb502158a69982c608f5aa66a1de6",
 ]
 
 [tool.hatch.build.targets.wheel]
