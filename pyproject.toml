@@ -20,7 +20,7 @@ classifiers = [
 # protobuf: Pulse's generated _pb2 code refuses a runtime older than 7.35.0; the
 # next major is untested, so it is excluded.
 dependencies = [
-    "bigraph-schema>=1.8.3",
+    "bigraph-schema>=1.8.3,<1.8.4",  # <1.8.4: upstream removed the `matching` submodule holes.py needs
     "process-bigraph>=1.10.1",
     "numpy",
     "platformdirs",  # cache directory for stabilized patient states
